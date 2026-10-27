@@ -330,7 +330,7 @@ const PIECES_NEEDED = 3;
 
 // 门缝后端（Cloudflare Worker）。部署完把地址填进 DOOR_API_DEFAULT；
 // 留空则整个门缝功能关闭。地址栏加 ?door=<地址> 可临时覆盖（本地调试用）。
-const DOOR_API_DEFAULT = "";
+const DOOR_API_DEFAULT = "https://benzi-door.3261387168-842.workers.dev";
 const DOOR_API = (new URLSearchParams(location.search).get("door") || DOOR_API_DEFAULT)
   .replace(/\/+$/, "");
 
@@ -665,13 +665,33 @@ class BenziGame {
   // 第一次走到后门：门缝里那一叠纸
   async show_receipt_slot() {
     this._emit(`<span class="ev">你第一次走到后门，看见门缝下面塞着一叠纸，纸边露出来一截。</span>`);
-    const line = await doorRead();
+    const r = await doorList(1);
+    const line = r && r.items[0] ? r.items[0].line : null;
+    const count = r ? r.count : 0;
     if (line) {
       this._emit(`<span class="ev">你抽出一张。上面写着一句：「${escapeHtml(line)}」</span>`);
       this._emit(`<span class="ev">这笔字可能是陌生的，也可能只是你忘了自己写过；句子里提到的那间屋，你今晚没去过——也可能是你去过，不记得。</span>`);
       this._emit(`<span class="ev">纸不旧。边上还有新折的痕迹——塞进来没多久。</span>`);
+      if (count > 1) this._emit(`<span class="ev">（这叠纸里一共塞过 ${count} 张。想往前翻，在这里输入「门缝」。）</span>`);
     } else {
       this._emit(`<span class="ev">你第一次走到后门，看见门缝下面空着。纸边被磨得发毛 —— 这里常有人往里塞东西，又抽走。</span>`);
+    }
+  }
+
+  // 在后门翻门缝：最近 N 张
+  async showDoorHistory(n) {
+    const r = await doorList(n);
+    if (!r) { this._emit(`<span class="warn">门缝现在不通。</span>`); return; }
+    if (r.items.length === 0) {
+      this._emit(`<span class="ev">你把那一叠纸翻到底。一张也没有。</span>`);
+      return;
+    }
+    this._emit(`<span class="ev">你把门缝里那一叠翻过来，最近的几张：</span>`);
+    r.items.forEach((it, i) => {
+      this._emit(`<span class="ev">　${i + 1}. 「${escapeHtml(it.line)}」</span>`);
+    });
+    if (r.count > r.items.length) {
+      this._emit(`<span class="ev">（共 ${r.count} 张，这里只翻最近的 ${r.items.length} 张。）</span>`);
     }
   }
 
@@ -901,6 +921,14 @@ class BenziGame {
       this.show(true);
       return;
     }
+    if (head === "门缝") {
+      if (this.pos !== "2,2") {
+        this._emit(`<span class="ev">只有站在后门口，才翻得到门缝里那一叠。</span>`);
+      } else {
+        this.showDoorHistory(10);
+      }
+      return;
+    }
     if (ARROWS[head]) {
       acted = this.move(head);
     } else if (head === "写" || head === "write") {
@@ -912,7 +940,7 @@ class BenziGame {
       if (/^\d+$/.test(rest.trim())) acted = this.verify(parseInt(rest.trim()));
       else { this._emit(`<span class="ev">验 <页码>。</span>`); return; }
     } else {
-      this._emit(`<span class="ev">不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，看，退。</span>`);
+      this._emit(`<span class="ev">不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，看，门缝，退。</span>`);
       this._emit(`<span class="ev">后门要三张原话，还要你验过一页。</span>`);
       return;
     }
@@ -1045,7 +1073,7 @@ function escapeHtml(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// ── 门缝：读最近一张 / 塞一张 ───────────────────────────
+// ── 门缝：读最近一张 / 翻历史 / 塞一张 ───────────────────
 async function doorRead() {
   if (!DOOR_API) return null;
   try {
@@ -1053,6 +1081,19 @@ async function doorRead() {
     if (!r.ok) return null;
     const j = await r.json();
     return (j && j.line) ? String(j.line) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 取最近 N 条，返回 {items:[{line,ts}], count}；失败返回 null
+async function doorList(n) {
+  if (!DOOR_API) return null;
+  try {
+    const r = await fetch(`${DOOR_API}/door?list=${n}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return { items: Array.isArray(j.items) ? j.items : [], count: j.count | 0 };
   } catch (e) {
     return null;
   }
