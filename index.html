@@ -111,6 +111,62 @@
     white-space: pre-wrap;
   }
   #room-paper .label { color: var(--dim); font-style: italic; }
+  /* 场景画布 */
+  .scene {
+    width: 100%;
+    height: 340px;
+    margin: 4px 0 16px;
+    border: 1px solid var(--paper-edge);
+    background: #efe6cf;
+    position: relative;
+    overflow: hidden;
+  }
+  .scene svg { display: block; width: 100%; height: 100%; }
+  .scene .act-label {
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--dim);
+    opacity: 0.7;
+  }
+  @keyframes lamp-flicker {
+    0%, 100% { opacity: 0.85; }
+    45% { opacity: 1; }
+    55% { opacity: 0.78; }
+  }
+  @keyframes glow-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.85; }
+  }
+  @keyframes ink-spread {
+    0% { transform: scale(0.4); opacity: 0.3; }
+    100% { transform: scale(1.1); opacity: 0.9; }
+  }
+  @keyframes paper-float {
+    0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+    50% { transform: translateY(-3px) rotate(var(--r, 0deg)); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .scene .lamp-glow { animation: glow-pulse 4s ease-in-out infinite; transform-origin: center; }
+  .scene .ink { animation: ink-spread 8s ease-out forwards; transform-origin: center; }
+  .scene .paper1 { --r: -4deg; animation: paper-float 5s ease-in-out infinite; }
+  .scene .paper2 { --r: 3deg; animation: paper-float 6s ease-in-out infinite 0.5s; }
+  .scene .paper3 { --r: -2deg; animation: paper-float 7s ease-in-out infinite 1s; }
+  /* 门缝提示 */
+  .door-hint {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--dim);
+    font-style: italic;
+    letter-spacing: 0.04em;
+    border-top: 1px dotted var(--line);
+    padding-top: 8px;
+  }
   #notebook-pages {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -283,11 +339,13 @@
   <div id="status">第 1/13 次醒来　还剩 13 次</div>
   <div class="grid">
     <div>
-      <div class="panel">
+      <div class="panel" id="now-panel">
         <h2>现在</h2>
+        <div id="scene" class="scene act-1"></div>
         <h3 id="room-name">门厅</h3>
         <p id="room-desc"></p>
         <div id="room-paper"></div>
+        <p id="door-hint" class="door-hint"></p>
       </div>
       <div class="panel" style="margin-top:14px">
         <h2>本子</h2>
@@ -793,6 +851,13 @@ class BenziGame {
     return this.log.some(e => e[0] === "check" || e[0] === "caught");
   }
 
+  // 当前幕：1 醒来 / 2 发现替写 / 3 集原话回门厅
+  act() {
+    if (this.pieces.length >= PIECES_NEEDED) return 3;
+    if (this.round >= 3) return 2;
+    return 1;
+  }
+
   check_end() {
     if (this.pieces.length >= PIECES_NEEDED && this.pos === "0,0") {
       if (this.verified()) {
@@ -1006,10 +1071,158 @@ function fmt(line, vals) {
 }
 
 // ── UI 渲染：把当前 game 状态画到右侧面板 ───────────────
+// 场景画布：三幕对应的纯 SVG 场景，符合剧本氛围
+function sceneSvg(act) {
+  if (act === 2) return sceneAct2();
+  if (act === 3) return sceneAct3();
+  return sceneAct1();
+}
+
+// 第一幕 · 醒来：门厅，一盏没关的灯，桌上的本子
+function sceneAct1() {
+  return `
+  <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <radialGradient id="lamp1" cx="50%" cy="30%" r="60%">
+        <stop offset="0%" stop-color="#f4e4b8" stop-opacity="0.9"/>
+        <stop offset="60%" stop-color="#e8d5a0" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#efe6cf" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <!-- 墙 -->
+    <rect width="400" height="300" fill="#e8ddc2"/>
+    <!-- 地板 -->
+    <rect x="0" y="220" width="400" height="80" fill="#d4c6a3"/>
+    <line x1="0" y1="220" x2="400" y2="220" stroke="#b8a984" stroke-width="1"/>
+    <!-- 灯线 -->
+    <line x1="200" y1="0" x2="200" y2="70" stroke="#8a7f63" stroke-width="1.5"/>
+    <!-- 灯泡 -->
+    <ellipse cx="200" cy="82" rx="14" ry="18" fill="#f3e6b8" stroke="#b8a984" stroke-width="1"/>
+    <!-- 光晕 -->
+    <ellipse class="lamp-glow" cx="200" cy="82" rx="120" ry="140" fill="url(#lamp1)"/>
+    <!-- 桌子 -->
+    <rect x="90" y="195" width="220" height="10" fill="#9c8a63"/>
+    <rect x="100" y="205" width="8" height="60" fill="#8a7a55"/>
+    <rect x="292" y="205" width="8" height="60" fill="#8a7a55"/>
+    <!-- 本子 -->
+    <g transform="translate(155,160)">
+      <rect x="0" y="0" width="90" height="36" fill="#fbf6e9" stroke="#c9bd9f" stroke-width="1" transform="rotate(-3 45 18)"/>
+      <line x1="0" y1="12" x2="90" y2="10" stroke="#d6cdb6" stroke-width="0.8" transform="rotate(-3 45 18)"/>
+      <line x1="0" y1="24" x2="90" y2="22" stroke="#d6cdb6" stroke-width="0.8" transform="rotate(-3 45 18)"/>
+      <circle cx="45" cy="18" r="2" fill="#b8a984" transform="rotate(-3 45 18)"/>
+    </g>
+    <!-- 一双鞋 -->
+    <g transform="translate(40,245)">
+      <ellipse cx="0" cy="0" rx="20" ry="7" fill="#5a4d3a"/>
+      <ellipse cx="26" cy="0" rx="20" ry="7" fill="#5a4d3a"/>
+    </g>
+    <text x="350" y="290" font-size="11" fill="#8a7f63" font-family="serif" opacity="0.5">门厅</text>
+  </svg>`;
+}
+
+// 第二幕 · 发现替写：本子翻开，一页新墨迹在渗
+function sceneAct2() {
+  return `
+  <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <radialGradient id="lamp2" cx="50%" cy="25%" r="60%">
+        <stop offset="0%" stop-color="#f4e4b8" stop-opacity="0.8"/>
+        <stop offset="100%" stop-color="#efe6cf" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="ink-blur"><feGaussianBlur stdDeviation="0.8"/></filter>
+    </defs>
+    <rect width="400" height="300" fill="#e6dcc0"/>
+    <ellipse cx="200" cy="60" rx="100" ry="120" fill="url(#lamp2)"/>
+    <!-- 翻开的本子 -->
+    <g transform="translate(60,90)">
+      <rect x="0" y="0" width="280" height="160" fill="#fbf6e9" stroke="#c9bd9f" stroke-width="1.2"/>
+      <line x1="140" y1="0" x2="140" y2="160" stroke="#d6cdb6" stroke-width="1"/>
+      <!-- 左页：旧字 -->
+      <g opacity="0.55">
+        <line x1="14" y1="28" x2="126" y2="28" stroke="#6b6258" stroke-width="1.2"/>
+        <line x1="14" y1="46" x2="110" y2="46" stroke="#6b6258" stroke-width="1.2"/>
+        <line x1="14" y1="64" x2="120" y2="64" stroke="#6b6258" stroke-width="1.2"/>
+        <line x1="14" y1="82" x2="90" y2="82" stroke="#6b6258" stroke-width="1.2"/>
+      </g>
+      <!-- 右页：她写的新墨迹，在渗 -->
+      <g>
+        <line x1="154" y1="28" x2="266" y2="28" stroke="#2c2620" stroke-width="1.6" opacity="0.95"/>
+        <line x1="154" y1="46" x2="258" y2="46" stroke="#2c2620" stroke-width="1.6" opacity="0.9"/>
+        <line x1="154" y1="64" x2="240" y2="64" stroke="#2c2620" stroke-width="1.6" opacity="0.85"/>
+        <!-- 墨迹扩散 -->
+        <ellipse class="ink" cx="210" cy="100" rx="40" ry="12" fill="#2c2620" opacity="0.7" filter="url(#ink-blur)"/>
+        <ellipse class="ink" cx="210" cy="100" rx="28" ry="8" fill="#1a1612" opacity="0.85" filter="url(#ink-blur)" style="animation-delay:1s"/>
+      </g>
+      <!-- 墨渍 -->
+      <circle cx="170" cy="110" r="3" fill="#2c2620" opacity="0.6"/>
+      <circle cx="240" cy="130" r="2" fill="#2c2620" opacity="0.5"/>
+    </g>
+    <text x="350" y="290" font-size="11" fill="#8a7f63" font-family="serif" opacity="0.5">有人替你写了一页</text>
+  </svg>`;
+}
+
+// 第三幕 · 集原话：三张原话散落在本子上
+function sceneAct3() {
+  return `
+  <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <radialGradient id="lamp3" cx="50%" cy="25%" r="60%">
+        <stop offset="0%" stop-color="#f4e4b8" stop-opacity="0.8"/>
+        <stop offset="100%" stop-color="#efe6cf" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="400" height="300" fill="#e8ddc2"/>
+    <ellipse cx="200" cy="60" rx="100" ry="120" fill="url(#lamp3)"/>
+    <!-- 桌面上的本子 -->
+    <g transform="translate(120,140)">
+      <rect x="0" y="0" width="160" height="70" fill="#fbf6e9" stroke="#c9bd9f" stroke-width="1"/>
+      <line x1="0" y1="22" x2="160" y2="22" stroke="#d6cdb6" stroke-width="0.8"/>
+      <line x1="0" y1="44" x2="160" y2="44" stroke="#d6cdb6" stroke-width="0.8"/>
+    </g>
+    <!-- 三张原话：撕下来的页 / 罐头标签 / 旧信封 -->
+    <g class="paper1" style="transform-origin:center">
+      <rect x="55" y="95" width="110" height="40" fill="#f3ead0" stroke="#c9bd9f" stroke-width="0.8" transform="rotate(-6 110 115)"/>
+      <line x1="62" y1="108" x2="150" y2="108" stroke="#8b5a2b" stroke-width="1.2" transform="rotate(-6 110 115)"/>
+      <line x1="62" y1="122" x2="140" y2="122" stroke="#8b5a2b" stroke-width="1.2" transform="rotate(-6 110 115)"/>
+      <path d="M55 95 l4 -4 M165 95 l-4 -4 M55 135 l4 4 M165 135 l-4 4" stroke="#c9bd9f" stroke-width="0.8" fill="none" transform="rotate(-6 110 115)"/>
+    </g>
+    <g class="paper2" style="transform-origin:center">
+      <rect x="210" y="110" width="80" height="46" fill="#e8d8a8" stroke="#b8a984" stroke-width="0.8" transform="rotate(5 250 133)"/>
+      <text x="218" y="130" font-size="9" fill="#8b5a2b" font-family="serif" transform="rotate(5 250 133)">—— 标签背面</text>
+      <line x1="216" y1="138" x2="278" y2="138" stroke="#8b5a2b" stroke-width="1" transform="rotate(5 250 133)"/>
+    </g>
+    <g class="paper3" style="transform-origin:center">
+      <rect x="130" y="185" width="95" height="38" fill="#f0e6cc" stroke="#c9bd9f" stroke-width="0.8" transform="rotate(-2 177 204)"/>
+      <path d="M130 185 q47 -8 95 0" stroke="#c9bd9f" stroke-width="0.8" fill="none" transform="rotate(-2 177 204)"/>
+      <line x1="138" y1="200" x2="215" y2="200" stroke="#8b5a2b" stroke-width="1" transform="rotate(-2 177 204)"/>
+    </g>
+    <text x="340" y="290" font-size="11" fill="#8a7f63" font-family="serif" opacity="0.5">三张原话齐了</text>
+  </svg>`;
+}
+
+// 幕名
+function actLabel(act) {
+  return act === 3 ? "第三幕 · 集原话" : act === 2 ? "第二幕 · 发现替写" : "第一幕 · 醒来";
+}
+
 function render(game) {
   const [name, desc] = ROOMS[game.pos];
   document.getElementById("room-name").textContent = name;
   document.getElementById("room-desc").textContent = desc;
+
+  // 场景画布（按幕切换）
+  const act = game.act();
+  const scene = document.getElementById("scene");
+  scene.className = "scene act-" + act;
+  scene.innerHTML = `<span class="act-label">${actLabel(act)}</span>` + sceneSvg(act);
+
+  // 门缝提示：到后门时在"现在"面板底部给一句
+  const hint = document.getElementById("door-hint");
+  if (game.pos === "2,2" && !game.over) {
+    hint.innerHTML = "后门。门缝里有风——输入「门缝」可翻所有人留过的话。";
+  } else {
+    hint.innerHTML = "";
+  }
 
   const paper = document.getElementById("room-paper");
   if (game.pos in game.hidden) {
@@ -1058,7 +1271,9 @@ function render(game) {
   cmd.disabled = !canType;
   cmd.placeholder = game.awaitingLeave
     ? "四十字以内。直接回车 = 不留。"
-    : "n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退";
+    : (game.pos === "2,2"
+       ? "门缝 · n/s/e/w · 写 · 抄 · 验 <页码> · 看 · 退"
+       : "n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退");
   if (canType) cmd.focus();
 
   // 留话阶段：快捷按钮全部禁用
@@ -1124,6 +1339,7 @@ function newGame(seed) {
   game._emit(`<span class="title">　　本　　子</span>`);
   game._emit(`<span class="ev">${WAKES} 次醒来。三页纸。三张原话。</span>`);
   game._emit(`<span class="ev">走一步、写一句、抄一句、验一页，各花掉一次醒来。看不花。</span>`);
+  game._emit(`<span class="ev">后门有条缝。走到后门，输入「门缝」，能看见所有人在这条缝里留过的话。</span>`);
   game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
   // 第一次 show
   game.show(false);
