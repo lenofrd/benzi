@@ -1275,7 +1275,7 @@ BTN_CMDS.forEach(c => {
 
 // 换一局 / 用法
 document.getElementById("act-restart").addEventListener("click", () => {
-  if (!confirm("开新的一局？这一局就丢了。")) return;
+  if (!confirm("开新的一局？当前这一局的进度不会保留。")) return;
   clearSave();
   document.getElementById("log").innerHTML = "";
   game = newGame(getSeedFromUrl());
@@ -1290,11 +1290,16 @@ document.getElementById("act-help").addEventListener("click", () => {
   写 &lt;一句话&gt;            写进本子（最多 60 字；满页挤掉最旧的非原话）
   抄                       把面前的原话抄进本子
   验 &lt;页码&gt;                验那页的墨迹是谁的（假页会被撕掉，腾一页）
-  看                       看屋里和本子（不花醒来）
+  看                       看屋里和本子（不花醒来）；在后门可重读门缝
+  门缝                     在后门翻最近的十条留话
   退                       合上本子，结束本局
 
 后门在东北角，要三张原话，还要你亲手验过一页墨迹。
-十三次醒来。用完了不是死，是这一天到此为止。</span>`;
+十三次醒来。用完了不是死，是这一天到此为止。
+
+门缝：所有玩过的人共用的投递口。一局结束可以留一句话（最多 40 字），
+走到后门能抽到最近塞进去的那张；输入「门缝」能往前翻。门缝里的话不归你管，
+也可能是别人留的。</span>`;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 });
