@@ -14,3 +14,7 @@ _tmp/
 # 工作现场与带凭据的推送脚本（只挡那个脚本，别挡整个 tools/）
 v0.5/
 /tools/push.mjs
+
+# 本地凭据文件，含 PAT 和私钥路径，绝不能提交
+github-secrets.local.md
+github-secrets.local.*
