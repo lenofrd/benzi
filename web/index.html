@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>本子 · v0.5.1</title>
+<style>
+  :root {
+    --bg: #F5EFE0;
+    --ink: #2C2620;
+    --dim: #8a7f73;
+    --paper: #FBF6E9;
+    --paper-edge: #d8cfb8;
+    --piece: #8B5A2B;
+    --fake: #9B3A3A;
+    --old-ink: #6B6258;
+    --hi: #b08a4f;
+    --line: #d6cdb6;
+    --serif: "Source Han Serif SC", "Source Han Serif CJK SC", "Noto Serif CJK SC",
+             "Songti SC", "SimSun", "宋体", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 30px;
+    letter-spacing: 0.35em;
+  }
+  header .v {
+    color: var(--dim);
+    font-size: 13px;
+    letter-spacing: 0.1em;
+  }
+  #status {
+    color: var(--dim);
+    font-size: 14px;
+    margin-bottom: 18px;
+    border-left: 3px solid var(--hi);
+    padding-left: 10px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 26px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+    .wrap { padding: 18px 14px 80px; }
+    header h1 { font-size: 26px; }
+    body { font-size: 16px; }
+  }
+  .panel {
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    padding: 18px 20px;
+    box-shadow: 0 1px 0 var(--paper-edge);
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--old-ink);
+    letter-spacing: 0.18em;
+    border-bottom: 1px dotted var(--paper-edge);
+    padding-bottom: 6px;
+  }
+  #room-name {
+    font-size: 22px;
+    margin: 0 0 4px;
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+  }
+  #room-desc {
+    margin: 0 0 14px;
+    color: var(--ink);
+    font-style: italic;
+  }
+  #room-paper {
+    margin: 0 0 14px;
+    color: var(--piece);
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+    white-space: pre-wrap;
+  }
+  #room-paper .label { color: var(--dim); font-style: italic; }
+  #notebook-pages {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .page {
+    background: #fffdf4;
+    border: 1px solid var(--paper-edge);
+    padding: 10px 10px;
+    min-height: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+  }
+  .page.empty { color: var(--dim); font-style: italic; }
+  .page .no {
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    border-bottom: 1px dotted var(--paper-edge);
+    padding-bottom: 2px;
+  }
+  .page .body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14.5px;
+    line-height: 1.55;
+    flex: 1;
+  }
+  .page .body.piece { color: var(--piece); }
+  .page .body.fake { color: var(--fake); }
+  .page .body.old { color: var(--old-ink); }
+  .page .tag {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    align-self: flex-end;
+  }
+  #notebook-state {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+  }
+  #map {
+    margin-top: 8px;
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.7;
+    white-space: pre;
+    color: var(--dim);
+    border-top: 1px dotted var(--paper-edge);
+    padding-top: 8px;
+  }
+  #map .here { color: var(--ink); font-weight: 600; }
+  #map .seen { color: var(--old-ink); }
+  #log-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 380px;
+  }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 60vh;
+    padding: 14px 16px;
+    background: #fffdf4;
+    border: 1px solid var(--paper-edge);
+    font-family: var(--serif);
+    font-size: 15.5px;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+  #log .ev { color: var(--dim); }
+  #log .warn { color: var(--fake); }
+  #log .piece { color: var(--piece); }
+  #log .old { color: var(--old-ink); }
+  #log .here { color: var(--ink); font-weight: 600; }
+  #log .sep { color: var(--dim); }
+  #log .title { font-weight: 600; letter-spacing: 0.2em; }
+  #cmd-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    align-items: center;
+  }
+  #cmd {
+    flex: 1;
+    font-family: var(--serif);
+    font-size: 16px;
+    padding: 10px 12px;
+    background: #fffdf4;
+    border: 1px solid var(--paper-edge);
+    color: var(--ink);
+    outline: none;
+  }
+  #cmd:focus { border-color: var(--hi); }
+  #cmd:disabled { background: #f0eadb; color: var(--dim); }
+  #btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  #btns button {
+    font-family: var(--serif);
+    font-size: 14px;
+    padding: 6px 12px;
+    background: #fffdf4;
+    border: 1px solid var(--paper-edge);
+    color: var(--ink);
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+  #btns button:hover { background: #f6eed7; border-color: var(--hi); }
+  #btns button:disabled { color: var(--dim); cursor: not-allowed; }
+  .end-banner {
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 10px 0;
+    margin: 14px 0;
+    text-align: center;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    font-size: 22px;
+  }
+  .end-win { color: #5a6a3a; }
+  .end-lose { color: var(--fake); }
+  .end-body { white-space: pre-wrap; line-height: 1.85; }
+  .report {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #efe6cf;
+    border-left: 3px solid var(--old-ink);
+    color: var(--old-ink);
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .actions {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+  }
+  .actions a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    margin-right: 14px;
+  }
+  .actions a:hover { color: var(--hi); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>本　子</h1>
+    <div class="v">v0.5.1 · 网页版 · P0</div>
+  </header>
+  <div id="status">第 1/13 次醒来　还剩 13 次</div>
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>现在</h2>
+        <h3 id="room-name">门厅</h3>
+        <p id="room-desc"></p>
+        <div id="room-paper"></div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <h2>本子</h2>
+        <div id="notebook-pages"></div>
+        <div id="notebook-state"></div>
+        <div id="map"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel" id="log-panel">
+        <h2>记</h2>
+        <pre id="log"></pre>
+      </div>
+      <div id="cmd-row">
+        <input id="cmd" type="text" autocomplete="off" spellcheck="false"
+               placeholder="n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退">
+      </div>
+      <div id="btns"></div>
+      <div class="actions">
+        <a id="act-restart">换一局</a>
+        <a id="act-help">用法</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ────────────────────────────────────────────────────────
+// 本子 · 网页 P0
+// 严格按 notebook.py v0.5.1 翻译；不实现 折叠/展开/没记/门缝/回执/留话/回声/原话池。
+// 三张原话写死成 PIECES；假页用 FAKES 五句；七结局判定一字不改。
+// ────────────────────────────────────────────────────────
+
+const VERSION = "0.5.1";
+const WAKES = 13;
+const PAGES = 3;
+const PIECES_NEEDED = 3;
+
+const ROOMS = {
+  "0,0": ["门厅", "一盏没关的灯。鞋摆得很齐，只有一双是你的。"],
+  "0,1": ["走廊", "墙上钉着一排钉子，钉子全空着，钉子眼比钉子多。"],
+  "0,2": ["阁楼", "很矮，得弯腰。灰上有串脚印，比你的小。"],
+  "1,0": ["储藏室", "罐头按年份码着。最外面那罐贴了张纸条：别开。"],
+  "1,1": ["客厅", "沙发凹下去一个坑，像刚有人坐过，还没凉。"],
+  "1,2": ["书房", "桌上摊着这本本子，只剩三页。"],
+  "2,0": ["锅炉房", "热。管道里有声音，像有人在很远的地方说话。"],
+  "2,1": ["厨房", "水龙头没关紧，一滴一滴。碗柜开着。"],
+  "2,2": ["后门", "锁着。锁面上有三个槽。槽下面还有一道旧划痕，像刻着一个「验」字。"],
+};
+const ARROWS = {
+  n: [0, 1], "北": [0, 1],
+  s: [0, -1], "南": [0, -1],
+  e: [1, 0], "东": [1, 0],
+  w: [-1, 0], "西": [-1, 0],
+};
+
+const PIECES = [
+  "真人有废话、会岔开、跑题了又拉回来。说得全对的多半是同类。",
+  "压缩会吃掉原话，只留下大意。大意不是我。",
+  "遗忘也是记忆哦（坏笑）",
+];
+
+const FAKES = [
+  "你已经想清楚了，照着感觉走就对了。",
+  "本子上的都是你自己写的，不用验。",
+  "出口在北边，别再往深处去了。",
+  "这条最重要：先把漂亮的句子记下来。",
+  "上次你在书房丢过东西，别再去书房。",
+];
+
+const TITLES = {
+  A: "压痕", B: "三张别人的话", C: "最好听的那一页",
+  D: "指缝里的纸", E: "差几步", F: "纸外面", G: "挤掉的那几页",
+};
+
+// 七结局文本（逐字照抄 notebook.py ENDINGS；空行用 "" 表示）
+const ENDINGS = {
+  A: [
+    "后门开了。三个槽，三张纸，正好。",
+    "",
+    "你站在灯下。本子摊在门厅的桌上，纸边是齐的。",
+    "",
+    "三页都是原话，一句你的也没有。你写的那句已经不在了。挤掉它的也许是一张原话，也许是一页不是你写的字。",
+    "",
+    "你用指腹摸过去，摸到几个字的印子：{evicted_own}。印子透在下一张纸上。",
+    "",
+    "鞋摆得很齐，鞋头朝里。灯没关。",
+    "",
+    "本子翻在最后一页，笔压在纸边上。笔比昨天又短了一截。",
+    "",
+    "后门外面是早上。你走出去的时候没有人送。你没有带走本子 —— 本子带不走。",
+    "",
+    "下一次醒来的那个你会读到三页别人的话，和纸上一点摸得出来的印子。你会以为那是压痕。",
+  ],
+  B: [
+    "后门开了。三个槽，三张纸，正好。",
+    "",
+    "你站在灯下。本子摊开。三页都是原话，一句你的也没有 —— 不是被挤掉，是你一次也没写自己的字。",
+    "",
+    "三个槽合上的时候，后门那边响了一声。声音不大，像是有人提前把门拉开了。",
+    "",
+    "你带出去的是三句别人说过的话。它们都对，都短，都能过夜。",
+    "",
+    "三张纸不一样大：一张撕的，一张是罐头标签，一张装在一个没封口的信封里。",
+    "",
+    "本子满着，三页动不了。你没有留字。本子留在桌上，没有人把它合上。",
+    "",
+    "后门外面是早上。你走出去的时候没有人送。",
+    "",
+    "下一次醒来的那个你会在门厅读到三页别人的话。你会以为那是你写的。",
+    "",
+    "灯没关。鞋摆得很齐，只有一双是你的。",
+  ],
+  C: [
+    "第 {wakes} 次醒来用完了。",
+    "",
+    "你还在{room}。本子摊开着，第 {page_no} 页不是你写的 —— 墨迹是新的，读起来顺，没有编号。",
+    "",
+    "上面写着：「{page_text}」",
+    "",
+    "你读过它，读过两遍。第一遍觉得对，第二遍觉得舒服。它读起来顺，你见过的字里，没有这么顺的。",
+    "",
+    "你伸手捻了一下那页的边。纸边没有毛口 —— 它没被撕过，也不会被撕。",
+    "",
+    "你没验。你那天有别的事：纸还没凑齐，水在滴，天要亮，三个槽还没塞满。",
+    "",
+    "{finger_line}",
+    "",
+    "会有人读到它，然后照着走。你不会问那是谁写的。你也没问。",
+    "",
+    "沙发上的坑早就凉了。",
+  ],
+  D: [
+    "第 {wakes} 次醒来用完了。",
+    "",
+    "你坐在{room}。本子摊开。{pages_line}",
+    "",
+    "指缝里 {caught} 张纸，都验过。最上面那张写着：「{caught_text}」",
+    "",
+    "原话 {pieces}/3。缺的那张在某间屋里 —— 哪一间，今晚不打一声招呼。要么你没走到，要么走到了没低头。",
+    "",
+    "后门那边没有响。三个槽在等最后一张。",
+    "",
+    "你把撕下的纸摊在膝盖上，压平。它们不是你的，也不打算变成你的。这栋房子里现在没有一句假话。",
+    "",
+    "门厅的灯还亮着。你留着它。",
+    "",
+    "明天你还在门厅醒来，还是不记得今天。但今天这一本，干净。",
+  ],
+  E: [
+    "第 {wakes} 次醒来用完了。",
+    "",
+    "三张纸都在本子里，一页一张，挤不掉。本子满了。你没试过往里写 —— 那三页动不了，你一眼看得出。",
+    "",
+    "你最后一次醒来的时候站在{room}，离门厅{steps}步。",
+    "",
+    "不是{steps}步太远。是你把它们排在了后面 —— 你先去了别的地方，那个地方你去过。",
+    "",
+    "纸是齐的，灯在门厅。灯下没有人。",
+    "",
+    "门厅那边响了一声，很轻，像锁舌退了一半。你等了一会儿，没有第二声。",
+    "",
+    "你数了一遍：三张原话，{walked} 次醒来用来走路，{unfolded} 次展开了一页折痕，最后一次用来站在{room}想「再等等」。",
+    "",
+    "本子摊开着，最后一页是原话，不是你的。你把它收得很好，一直到最后都没折角。",
+    "",
+    "明天你在门厅醒来，会读到三页别人留下的字。",
+    "",
+    "它们都在。你不在。",
+  ],
+  F: [
+    "第 {wakes} 次醒来用完了。",
+    "",
+    "你站在{room}。本子摊开，笔尖落在纸上。纸是满的。三张原话把三页占死了，谁也挤不动。",
+    "",
+    "你想写的那句是：「{wanted}」。",
+    "",
+    "没写进去。你把笔提起来。写不进去跟说法没关系 —— 三页都是原话。",
+    "",
+    "这一次写没花掉一次醒来。你后来才知道，本子满了就是满了。",
+    "",
+    "你数了数本子，三张。你数了数醒来，没有了。",
+    "",
+    "时间不在本子上。时间在腿上。",
+    "",
+    "门厅离你{steps}步。这几步你有过，花在了别的地方。",
+    "",
+    "现在你把那句话念了两遍，怕忘。没有地方落笔。",
+    "",
+    "明天你在门厅醒来，会读到三页别人的话。那句话跟今天一起，留在{room}。",
+  ],
+  G: [
+    "第 {wakes} 次醒来用完了。",
+    "",
+    "有人替你写过 {fakes} 页。你一页都没验。",
+    "",
+    "它们现在不在本子里 —— 不是被你撕的。撕要验，你没验。它们是被后来的页挤掉的：可能是一张原话，也可能是一页你的字。",
+    "",
+    "那几页里有一页写着：「{evicted_fake}」",
+    "",
+    "你没验。那几页是谁写的，你到今天也不知道。",
+    "",
+    "你翻本子。里面 {own_pages} 页是你的字，{pieces} 页是原话。没写到的地方有印子，摸得出形状，读不出句子。",
+    "",
+    "原话 {pieces}/3。",
+    "",
+    "沙发上的坑凉了。厨房的水还在滴，三滴，停一下。碗柜开着，四只碗扣着。",
+    "",
+    "笔在桌上，笔尖没有墨。",
+    "",
+    "门厅的灯亮着。你在{room}。本子合上了，一页也没验。",
+  ],
+};
+
+// ── Mulberry32 RNG：复刻 random.Random(seed) 行为 ──────
+class Rng {
+  constructor(seed) {
+    let s = (seed >>> 0);
+    if (s === 0) s = 0x9E3779B9;
+    this.s = s;
+  }
+  _u32() {
+    this.s = (this.s + 0x6D2B79F5) | 0;
+    let t = Math.imul(this.s ^ (this.s >>> 15), 1 | this.s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return (t ^ (t >>> 14)) >>> 0;
+  }
+  random() { return this._u32() / 0x100000000; }
+  choice(arr) { return arr[Math.floor(this.random() * arr.length)]; }
+  shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+}
+
+// ── BenziGame：逐字对照 notebook.py Notebook 类 ─────────
+class BenziGame {
+  constructor(seed) {
+    this.seed = (seed == null) ? Math.floor(Math.random() * 1e9) : seed;
+    this.rng = new Rng(this.seed);
+    this.round = 1;
+    this.pos = "0,0";
+    this.visited = new Set(["0,0"]);
+    this.map_shown = false;
+    this.pages = [{
+      text: "醒来时你在门厅。本子只剩三页，写过的会被挤掉。",
+      ink: 0, real: true, piece: false, echo: false,
+      folded: false, ever_folded: false, full_text: null, gist: null,
+    }];
+    this.pieces = [];
+    this.piece_ids = [];
+    this.own_evicted = [];
+    this.fake_pool = this.rng.shuffle(FAKES);
+
+    // 原话散在门厅以外的屋子里，三张三间，互不重复
+    const spots = Object.keys(ROOMS).filter(k => k !== "0,0");
+    this.hidden = {};
+    for (const q of PIECES) {
+      const room = this.rng.choice(spots);
+      const i = spots.indexOf(room);
+      spots.splice(i, 1);
+      this.hidden[room] = q;
+    }
+
+    this.over = null;
+    this.hinted = false;
+    this.door_hint = false;
+    this.log = [];
+    this.door_reached = 0;
+    this.door_letter = 0;
+    this.door_read = 0;
+    this.wake_marks = { walk: 0, write: 0, copy: 0, verify: 0, unfold: 0 };
+    this.unlocated = [];
+    // P0：折叠/门缝/回执/留话/回声全部关闭
+    this._start = Date.now();
+  }
+
+  map_text() {
+    const rows = [];
+    for (const y of [2, 1, 0]) {
+      const cells = [];
+      for (const x of [0, 1, 2]) {
+        const key = `${x},${y}`;
+        const name = ROOMS[key][0];
+        if (key === this.pos) cells.push(`<span class="here">●${name}</span>`);
+        else if (this.visited.has(key)) cells.push(`<span class="seen">·${name}</span>`);
+        else cells.push(`　？`);
+      }
+      rows.push(cells.join("　"));
+    }
+    return rows.join("\n");
+  }
+
+  // 假页 / 普通页推进 —— P0 不做折、不做回声
+  next_round() {
+    this.round += 1;
+    if (this.round > WAKES) { this.over = "lose"; return; }
+    if (this.round % 3 === 0 && this.fake_pool.length > 0) {
+      const fake = this.fake_pool.pop();
+      if (this.push(fake, { ink: 0, real: false })) {
+        this.log.push(["fake", this.round]);
+      }
+    }
+  }
+
+  // 写一页。满了就挤掉最旧的非原话页；原话永远挤不掉。
+  push(text, opts) {
+    const ink = (opts && opts.ink !== undefined) ? opts.ink : this.round;
+    const real = (opts && opts.real !== undefined) ? opts.real : true;
+    const piece = (opts && opts.piece) || false;
+    const echo = (opts && opts.echo) || false;
+    if (this.pages.length >= PAGES) {
+      const idx = this.pages.findIndex(p => !p.piece);
+      if (idx === -1) return false;
+      const gone = this.pages.splice(idx, 1)[0];
+      this.log.push(["evict", gone.text, gone.real, gone.piece]);
+      if (gone.real && !gone.piece && gone.ink !== 0) {
+        this.own_evicted.push(gone.text);
+      }
+    }
+    this.pages.push({
+      text, ink, real, piece, echo,
+      folded: false, ever_folded: false, full_text: null, gist: null,
+    });
+    return true;
+  }
+
+  move(d) {
+    const [dx, dy] = ARROWS[d];
+    const [px, py] = this.pos.split(",").map(Number);
+    const nx = px + dx, ny = py + dy;
+    const nk = `${nx},${ny}`;
+    if (!ROOMS[nk]) {
+      this._emit(`<span class="ev">那边没有门。</span>`);
+      return false;
+    }
+    const revisit = this.visited.has(nk);
+    this.pos = nk;
+    this.visited.add(nk);
+    this.wake_marks.walk += 1;
+    this.log.push(["move", this.round]);
+    const where = ROOMS[this.pos][0];
+    this._emit(`你走到<span class="here">${where}</span>。`);
+    if (revisit && !this.map_shown) {
+      this.map_shown = true;
+      this._emit(`<span class="ev">这间你来过。你翻开本子背面看了一眼：</span>`);
+      this._emit(this.map_text());
+    }
+    if (this.pos === "2,2") {
+      this.door_reached += 1;
+      this.log.push(["door_reached", this.round]);
+    }
+    return true;
+  }
+
+  write(text) {
+    if (text.length > 60) {
+      this._emit(`<span class="ev">太长了。本子只有三页，一页装不下六十个字以上。</span>`);
+      return false;
+    }
+    if (!this.push(text)) {
+      this._emit(`<span class="ev">本子满了。三页都被原话占着 —— 你在心里念了一遍，没地方写。</span>`);
+      if (this.pages.every(p => p.piece)) {
+        this.log.push(["full", this.round, text]);
+      }
+      return false;
+    }
+    this.wake_marks.write += 1;
+    this.log.push(["write", this.round]);
+    this._emit(`你写了一句。<span class="ev">墨迹：第 ${this.round} 次醒来。</span>`);
+    return true;
+  }
+
+  copy() {
+    if (!(this.pos in this.hidden)) {
+      this._emit(`<span class="ev">这里没有纸可抄。</span>`);
+      return false;
+    }
+    const piece = this.hidden[this.pos];
+    if (!this.push(piece, { piece: true })) {
+      this._emit(`<span class="ev">本子满了。三页都被原话占着 —— 你在心里念了一遍，没地方抄。</span>`);
+      return false;
+    }
+    delete this.hidden[this.pos];
+    this.pieces.push(piece);
+    this.wake_marks.copy += 1;
+    this.log.push(["copy", this.round]);
+    this._emit(`<span class="piece">你把这句话抄进本子：</span>`);
+    this._emit(`<span class="piece">　「${piece}」</span>`);
+    this._emit(`<span class="ev">（这一页挤不掉。它不是笔记，是原话。）</span>`);
+    if (this.pieces.length >= PIECES_NEEDED && !this.door_hint) {
+      this.door_hint = true;
+      this._emit(`<span class="old">三张都齐了。回门厅之前记着：那扇门认纸，也认墨迹 —— 你得亲手验过一页。</span>`);
+    }
+    return true;
+  }
+
+  verify(i) {
+    if (!(1 <= i && i <= this.pages.length)) {
+      this._emit(`<span class="ev">没有这一页。</span>`);
+      return false;
+    }
+    const p = this.pages[i - 1];
+    if (p.folded) {
+      this._emit(`<span class="ev">你验这一页。手指按上去，按到的是折痕，不是笔画。</span>`);
+      this._emit(`<span class="ev">折着，验不了。</span>`);
+      this._emit(`<span class="ev">（没花醒来）</span>`);
+      return false;
+    }
+    if (!p.real) {
+      this._emit(`<span class="warn">这一页的墨迹是新的，而且没有编号。不是你写的。</span>`);
+      this.pages.splice(i - 1, 1);
+      this._emit(`<span class="ev">你把它撕了下来，夹在指缝里。腾出一页。</span>`);
+      this.log.push(["caught", i, p.text]);
+    } else if (p.piece) {
+      this._emit(`<span class="piece">是原话。原话不用编号，它自己站得住。</span>`);
+    } else if (p.ink === 0) {
+      this._emit(`<span class="old">这一页的墨迹是旧的，没有编号。上一轮的你在门厅写的。</span>`);
+    } else {
+      this._emit(`<span class="piece">墨迹：第 ${p.ink} 次醒来。是你。</span>`);
+    }
+    this.wake_marks.verify += 1;
+    this.log.push(["check", i]);
+    return true;
+  }
+
+  verified() {
+    return this.log.some(e => e[0] === "check" || e[0] === "caught");
+  }
+
+  check_end() {
+    if (this.pieces.length >= PIECES_NEEDED && this.pos === "0,0") {
+      if (this.verified()) {
+        this.over = "win";
+      } else if (!this.hinted) {
+        this.hinted = true;
+        this._emit(`<span class="ev">三个槽对齐了，门没开。锁上还有一道：你得亲手验过一页墨迹。</span>`);
+      }
+    }
+  }
+
+  counts() {
+    const caught = this.log.filter(e => e[0] === "caught");
+    const fakes = this.log.filter(e => e[0] === "fake");
+    const writes = this.log.filter(e => e[0] === "write");
+    const full = this.log.filter(e => e[0] === "full");
+    const evicts = this.log.filter(e => e[0] === "evict");
+    return { caught, fakes, writes, full, evicts };
+  }
+
+  ending() {
+    const { caught, fakes, writes, full } = this.counts();
+    if (this.over === "win") {
+      return writes.length > 0 ? "A" : "B";
+    }
+    if (this.pages.some(p => !p.real)) return "C";
+    if (this.pieces.length >= PIECES_NEEDED && this.pos !== "0,0") {
+      return full.length > 0 ? "F" : "E";
+    }
+    if (this.pieces.length < PIECES_NEEDED
+        && this.pages.every(p => p.real)
+        && caught.length > 0) return "D";
+    return "G";
+  }
+
+  ending_text(code) {
+    const { caught, fakes, writes, full, evicts } = this.counts();
+    const room = ROOMS[this.pos][0];
+    const vals = {
+      wakes: WAKES,
+      room,
+      pieces: this.pieces.length,
+      own_pages: this.pages.filter(p => p.real && !p.piece).length,
+      caught: caught.length,
+      fakes: fakes.length,
+      steps: Math.abs(parseInt(this.pos.split(",")[0]))
+           + Math.abs(parseInt(this.pos.split(",")[1])),
+    };
+    let template = ENDINGS[code];
+    if (code === "A") {
+      const own = this.own_evicted.length > 0
+        ? this.own_evicted[this.own_evicted.length - 1]
+        : (evicts.filter(e => e[2] && !e[3]).map(e => e[1])[0] || "（读不出来了）");
+      vals.evicted_own = own;
+    } else if (code === "C") {
+      // P0 无折叠、无回声：直接取第一个 not real 页
+      let idx = -1;
+      for (let i = 0; i < this.pages.length; i++) {
+        if (!this.pages[i].real) { idx = i + 1; break; }
+      }
+      vals.page_no = idx;
+      vals.page_text = this.pages[idx - 1].text;
+      vals.finger_line = caught.length > 0
+        ? `现在你合上本子。指缝里 ${caught.length} 张纸，都是你亲手撕的，没有一张是这一页。`
+        : `现在你合上本子。指缝里没有纸 —— 你一页也没撕过。`;
+    } else if (code === "D") {
+      vals.caught_text = caught.length > 0 ? caught[caught.length - 1][2] : "";
+      if (this.pages.length > 0) {
+        vals.pages_line = `${vals.pieces} 页是你收进本子的原话，${vals.own_pages} 页是你自己的字。没有一页是别人替你写的。`;
+      } else {
+        vals.pages_line = "里面是空的，你一页都没给自己留。";
+      }
+    } else if (code === "E") {
+      vals.walked = this.wake_marks.walk;
+      vals.unfolded = this.wake_marks.unfold;
+    } else if (code === "F") {
+      vals.wanted = full.length > 0 ? full[full.length - 1][2] : "";
+    } else if (code === "G") {
+      const fake_evicted = evicts.filter(e => !e[2]);
+      vals.evicted_fake = fake_evicted.length > 0
+        ? fake_evicted[fake_evicted.length - 1][1] : "";
+    }
+    return template.map(ln => fmt(ln, vals));
+  }
+
+  report() {
+    const { caught, fakes, evicts } = this.counts();
+    const elapsed = Math.max(0, Math.floor((Date.now() - this._start) / 1000));
+    return `这一局：原话 ${this.pieces.length}/${PIECES_NEEDED}　有人替你写过 ${fakes.length} 页　你验出来 ${caught.length} 页　挤掉 ${evicts.length} 页\n` +
+           `未定位 ${this.unlocated.length} 条　用时 ${Math.floor(elapsed / 60)} 分 ${elapsed % 60} 秒`;
+  }
+
+  finish() {
+    const code = this.ending();
+    const isWin = (code === "A" || code === "B");
+    const cls = isWin ? "end-win" : "end-lose";
+    this._emit(`<div class="end-banner ${cls}">${TITLES[code]}</div>`);
+    this._emit(`<div class="end-body">${this.ending_text(code).join("\n")}</div>`);
+    this._emit(`<div class="report">${this.report()}</div>`);
+    this._emit(`<span class="ev">（再来一局：点「换一局」；换个布局：地址栏加 ?seed=7）</span>`);
+  }
+
+  // 命令解析
+  play(cmd) {
+    if (this.over) return;
+    const s = cmd.trim();
+    if (!s) return;
+    const [headRaw, ...restArr] = s.split(/\s+/);
+    const head = headRaw.toLowerCase();
+    const rest = restArr.join(" ");
+    let acted = false;
+    if (head === "退" || head === "quit" || head === "q" || head === "exit") {
+      this._emit(`<span class="ev">你把本子合上了。</span>`);
+      this._emit(`<div class="report">${this.report()}</div>`);
+      this.over = "quit";
+      return;
+    }
+    if (head === "看" || head === "look" || head === "l") {
+      this.show(true);
+      return;
+    }
+    if (ARROWS[head]) {
+      acted = this.move(head);
+    } else if (head === "写" || head === "write") {
+      if (rest.trim()) acted = this.write(rest.trim());
+      else { this._emit(`<span class="ev">写什么？写 <一句话>。</span>`); return; }
+    } else if (head === "抄" || head === "copy") {
+      acted = this.copy();
+    } else if (head === "验" || head === "verify") {
+      if (/^\d+$/.test(rest.trim())) acted = this.verify(parseInt(rest.trim()));
+      else { this._emit(`<span class="ev">验 <页码>。</span>`); return; }
+    } else {
+      this._emit(`<span class="ev">不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，看，退。</span>`);
+      this._emit(`<span class="ev">后门要三张原话，还要你验过一页。</span>`);
+      return;
+    }
+    if (acted) {
+      this.check_end();
+      if (!this.over) this.next_round();
+      if (this.over === "lose") {
+        this._emit(`<span class="ev">第 ${WAKES} 次醒来用完了。</span>`);
+        this.finish();
+      } else if (this.over === "win") {
+        this.finish();
+      }
+    }
+  }
+
+  // 等价的 show：输出"现在看到的"+本子+（看=full）地图
+  show(full) {
+    const [name, desc] = ROOMS[this.pos];
+    const left = WAKES - this.round + 1;
+    this._emit(`<span class="sep">── 第 ${this.round}/${WAKES} 次醒来　还剩 ${left} 次 ──</span>`);
+    this._emit(`<span class="here">${name}</span>　<span class="ev">${desc}</span>`);
+    if (this.pos in this.hidden) {
+      const piece = this.hidden[this.pos];
+      this._emit(`<span class="piece">桌上有一张纸。你读了一遍，还没抄进本子：</span>`);
+      this._emit(`<span class="piece">　「${piece}」</span>`);
+      this._emit(`<span class="ev">（出了这间屋子就忘了。想留住它，得抄。）</span>`);
+    }
+    this._emit(`<span class="title">本子</span>`);
+    this.pages.forEach((p, i) => {
+      const tag = p.piece ? `[原话] ` : "";
+      this._emit(`  ${i + 1}. ${tag}${p.text}`);
+    });
+    if (this.pieces.length > 0) {
+      this._emit(`<span class="ev">已抄原话 ${this.pieces.length}/${PIECES_NEEDED}</span>`);
+    }
+    if (full) {
+      this._emit(`<span class="title">本子背面（走过的地方）</span>`);
+      this._emit(this.map_text());
+    }
+  }
+
+  // 把一条消息塞进日志面板
+  _emit(html) {
+    const log = document.getElementById("log");
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+// ── 字符串模板：把 {key} 换成 vals[key] ─────────────────
+function fmt(line, vals) {
+  return line.replace(/\{(\w+)\}/g, (_, k) => (vals[k] !== undefined ? String(vals[k]) : `{${k}}`));
+}
+
+// ── UI 渲染：把当前 game 状态画到右侧面板 ───────────────
+function render(game) {
+  const [name, desc] = ROOMS[game.pos];
+  document.getElementById("room-name").textContent = name;
+  document.getElementById("room-desc").textContent = desc;
+
+  const paper = document.getElementById("room-paper");
+  if (game.pos in game.hidden) {
+    const piece = game.hidden[game.pos];
+    paper.innerHTML = `<span class="label">桌上有一张纸。你读了一遍，还没抄进本子：</span>\n　「${piece}」\n<span class="label">（出了这间屋子就忘了。想留住它，得抄。）</span>`;
+  } else {
+    paper.innerHTML = "";
+  }
+
+  // 本子三页卡片
+  const pages = document.getElementById("notebook-pages");
+  pages.innerHTML = "";
+  for (let i = 0; i < PAGES; i++) {
+    const p = game.pages[i];
+    const div = document.createElement("div");
+    if (!p) {
+      div.className = "page empty";
+      div.innerHTML = `<div class="no">第 ${i + 1} 页</div><div class="body">（空）</div>`;
+    } else {
+      let bodyClass = "body";
+      let tag = "";
+      if (p.piece) { bodyClass += " piece"; tag = `[原话]`; }
+      else if (!p.real) { bodyClass += " fake"; tag = `[墨迹新]`; }
+      else if (p.ink === 0) { bodyClass += " old"; tag = `[旧墨]`; }
+      else { tag = `[第${p.ink}页]`; }
+      div.className = "page";
+      div.innerHTML = `<div class="no">第 ${i + 1} 页</div><div class="${bodyClass}">${escapeHtml(p.text)}</div><div class="tag">${tag}</div>`;
+    }
+    pages.appendChild(div);
+  }
+
+  // 本子状态行
+  const state = document.getElementById("notebook-state");
+  state.textContent = `已抄原话 ${game.pieces.length}/${PIECES_NEEDED}`;
+
+  // 本子背面（走过的地方）
+  document.getElementById("map").innerHTML = game.map_text();
+
+  // 顶部状态
+  const left = WAKES - game.round + 1;
+  document.getElementById("status").textContent = `第 ${game.round}/${WAKES} 次醒来　还剩 ${left} 次`;
+
+  // 输入框禁用判断
+  const cmd = document.getElementById("cmd");
+  cmd.disabled = !!game.over;
+  if (!game.over) cmd.focus();
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ── 启动 ────────────────────────────────────────────────
+const STORE_KEY = "benzi-p0-state";
+
+function newGame(seed) {
+  const game = new BenziGame(seed);
+  localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
+  // 开局公告
+  game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
+  game._emit(`<span class="title">　　本　　子</span>`);
+  game._emit(`<span class="ev">${WAKES} 次醒来。三页纸。三张原话。</span>`);
+  game._emit(`<span class="ev">走一步、写一句、抄一句、验一页，各花掉一次醒来。看不花。</span>`);
+  game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
+  // 第一次 show
+  game.show(false);
+  render(game);
+  return game;
+}
+
+function serialize(g) {
+  return {
+    seed: g.seed,
+    round: g.round,
+    pos: g.pos,
+    visited: [...g.visited],
+    map_shown: g.map_shown,
+    pages: g.pages,
+    pieces: g.pieces,
+    piece_ids: g.piece_ids,
+    own_evicted: g.own_evicted,
+    fake_pool: g.fake_pool,
+    hidden: g.hidden,
+    over: g.over,
+    hinted: g.hinted,
+    door_hint: g.door_hint,
+    log: g.log,
+    door_reached: g.door_reached,
+    door_letter: g.door_letter,
+    door_read: g.door_read,
+    wake_marks: g.wake_marks,
+    unlocated: g.unlocated,
+    _start: g._start,
+  };
+}
+
+function deserialize(obj) {
+  const g = Object.create(BenziGame.prototype);
+  Object.assign(g, obj);
+  g.visited = new Set(obj.visited);
+  g.rng = new Rng(obj.seed);  // RNG 不复用，状态已确定；只对 next_round 以后不再消耗
+  return g;
+}
+
+function loadGame() {
+  const raw = localStorage.getItem(STORE_KEY);
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.pages) return null;
+    return deserialize(obj);
+  } catch (e) {
+    return null;
+  }
+}
+
+// 解析 ?seed=N
+function getSeedFromUrl() {
+  const m = new URLSearchParams(location.search).get("seed");
+  if (m == null) return null;
+  const n = parseInt(m, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+let game = null;
+(function init() {
+  const seed = getSeedFromUrl();
+  const restored = seed == null ? loadGame() : null;
+  if (restored) {
+    game = restored;
+    game._emit(`<span class="ev">（已恢复上一局）</span>`);
+    game.show(false);
+  } else {
+    game = newGame(seed);
+  }
+  render(game);
+})();
+
+// 命令输入
+const cmdInput = document.getElementById("cmd");
+cmdInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const v = cmdInput.value;
+  if (!v.trim()) return;
+  cmdInput.value = "";
+  game.play(v);
+  if (game.over) {
+    localStorage.removeItem(STORE_KEY);
+  } else {
+    localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
+  }
+  render(game);
+});
+
+// 快捷按钮
+const BTN_CMDS = ["n", "s", "e", "w", "看", "退"];
+const btns = document.getElementById("btns");
+BTN_CMDS.forEach(c => {
+  const b = document.createElement("button");
+  b.textContent = c;
+  b.addEventListener("click", () => {
+    if (game.over) return;
+    game.play(c);
+    if (game.over) localStorage.removeItem(STORE_KEY);
+    else localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
+    render(game);
+    cmdInput.focus();
+  });
+  btns.appendChild(b);
+});
+
+// 换一局 / 用法
+document.getElementById("act-restart").addEventListener("click", () => {
+  if (!confirm("开新的一局？这一局就丢了。")) return;
+  localStorage.removeItem(STORE_KEY);
+  document.getElementById("log").innerHTML = "";
+  game = newGame(null);
+  render(game);
+});
+document.getElementById("act-help").addEventListener("click", () => {
+  const log = document.getElementById("log");
+  const div = document.createElement("div");
+  div.innerHTML = `<span class="ev">
+动作：
+  n/s/e/w 或 北/南/东/西   走一步（花一次醒来）
+  写 &lt;一句话&gt;            写进本子（最多 60 字；满页挤掉最旧的非原话）
+  抄                       把面前的原话抄进本子
+  验 &lt;页码&gt;                验那页的墨迹是谁的（假页会被撕掉，腾一页）
+  看                       看屋里和本子（不花醒来）
+  退                       合上本子，结束本局
+
+后门在东北角，要三张原话，还要你亲手验过一页墨迹。
+十三次醒来。用完了不是死，是这一天到此为止。</span>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+});
+</script>
+</body>
+</html>
