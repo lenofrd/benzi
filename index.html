@@ -267,6 +267,11 @@
     margin-right: 14px;
   }
   .actions a:hover { color: var(--hi); }
+  #save-state {
+    font-size: 12px;
+    color: var(--dim);
+    opacity: 0.8;
+  }
 </style>
 </head>
 <body>
@@ -304,6 +309,7 @@
       <div class="actions">
         <a id="act-restart">换一局</a>
         <a id="act-help">用法</a>
+        <span id="save-state"></span>
       </div>
     </div>
   </div>
@@ -970,7 +976,7 @@ const STORE_KEY = "benzi-p0-state";
 
 function newGame(seed) {
   const game = new BenziGame(seed);
-  localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
+  save(game);
   // 开局公告
   game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
   game._emit(`<span class="title">　　本　　子</span>`);
@@ -981,6 +987,33 @@ function newGame(seed) {
   game.show(false);
   render(game);
   return game;
+}
+
+// 存档：写 localStorage；失败（无痕/配额满）时在界面上说一声，不静默吞掉
+function save(g) {
+  const ok = persist(g);
+  const el = document.getElementById("save-state");
+  if (!el) return;
+  if (ok) {
+    el.textContent = "已自动保存";
+    el.title = "这一局存在这台设备这个浏览器里";
+  } else {
+    el.textContent = "存不上（这个浏览器不让写本地存档）";
+    el.title = "无痕模式或禁用了本地存储";
+  }
+}
+
+function persist(g) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(serialize(g)));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clearSave() {
+  try { localStorage.removeItem(STORE_KEY); } catch (e) {}
 }
 
 function serialize(g) {
@@ -1006,6 +1039,7 @@ function serialize(g) {
     wake_marks: g.wake_marks,
     unlocated: g.unlocated,
     _start: g._start,
+    savedAt: Date.now(),
   };
 }
 
@@ -1039,16 +1073,21 @@ function getSeedFromUrl() {
 
 let game = null;
 (function init() {
-  const seed = getSeedFromUrl();
-  const restored = seed == null ? loadGame() : null;
-  if (restored) {
+  const restored = loadGame();
+  if (restored && !restored.over) {
     game = restored;
-    game._emit(`<span class="ev">（已恢复上一局）</span>`);
+    const d = restored.savedAt ? new Date(restored.savedAt) : null;
+    const when = d
+      ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+      : "";
+    game._emit(`<span class="ev">（接着上一局。${when ? when + " 存的，" : ""}第 ${game.round}/${WAKES} 次醒来。）</span>`);
     game.show(false);
   } else {
-    game = newGame(seed);
+    clearSave();
+    game = newGame(getSeedFromUrl());
   }
   render(game);
+  save(game);
 })();
 
 // 命令输入
@@ -1059,16 +1098,13 @@ cmdInput.addEventListener("keydown", (e) => {
   if (!v.trim()) return;
   cmdInput.value = "";
   game.play(v);
-  if (game.over) {
-    localStorage.removeItem(STORE_KEY);
-  } else {
-    localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
-  }
+  if (game.over) clearSave();
+  else save(game);
   render(game);
 });
 
-// 快捷按钮
-const BTN_CMDS = ["n", "s", "e", "w", "看", "退"];
+// 快捷按钮（「写/验」要带参数，仍须打字）
+const BTN_CMDS = ["n", "s", "e", "w", "抄", "看", "退"];
 const btns = document.getElementById("btns");
 BTN_CMDS.forEach(c => {
   const b = document.createElement("button");
@@ -1076,8 +1112,8 @@ BTN_CMDS.forEach(c => {
   b.addEventListener("click", () => {
     if (game.over) return;
     game.play(c);
-    if (game.over) localStorage.removeItem(STORE_KEY);
-    else localStorage.setItem(STORE_KEY, JSON.stringify(serialize(game)));
+    if (game.over) clearSave();
+    else save(game);
     render(game);
     cmdInput.focus();
   });
@@ -1087,9 +1123,9 @@ BTN_CMDS.forEach(c => {
 // 换一局 / 用法
 document.getElementById("act-restart").addEventListener("click", () => {
   if (!confirm("开新的一局？这一局就丢了。")) return;
-  localStorage.removeItem(STORE_KEY);
+  clearSave();
   document.getElementById("log").innerHTML = "";
-  game = newGame(null);
+  game = newGame(getSeedFromUrl());
   render(game);
 });
 document.getElementById("act-help").addEventListener("click", () => {
