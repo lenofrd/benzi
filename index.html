@@ -328,6 +328,12 @@ const WAKES = 13;
 const PAGES = 3;
 const PIECES_NEEDED = 3;
 
+// 门缝后端（Cloudflare Worker）。部署完把地址填进 DOOR_API_DEFAULT；
+// 留空则整个门缝功能关闭。地址栏加 ?door=<地址> 可临时覆盖（本地调试用）。
+const DOOR_API_DEFAULT = "";
+const DOOR_API = (new URLSearchParams(location.search).get("door") || DOOR_API_DEFAULT)
+  .replace(/\/+$/, "");
+
 const ROOMS = {
   "0,0": ["门厅", "一盏没关的灯。鞋摆得很齐，只有一双是你的。"],
   "0,1": ["走廊", "墙上钉着一排钉子，钉子全空着，钉子眼比钉子多。"],
@@ -567,7 +573,10 @@ class BenziGame {
     this.door_read = 0;
     this.wake_marks = { walk: 0, write: 0, copy: 0, verify: 0, unfold: 0 };
     this.unlocated = [];
-    // P0：折叠/门缝/回执/留话/回声全部关闭
+    // 门缝：所有玩家共用的投递口（P0 原先关闭，现在接 Cloudflare Worker）
+    this.door_seen = false;    // 「第一次走到后门」那段只读一次
+    this.awaitingLeave = false; // 结局之后，输入框改成留话
+    this.leaveDone = false;
     this._start = Date.now();
   }
 
@@ -645,8 +654,48 @@ class BenziGame {
     if (this.pos === "2,2") {
       this.door_reached += 1;
       this.log.push(["door_reached", this.round]);
+      if (!this.door_seen && DOOR_API) {
+        this.door_seen = true;
+        this.show_receipt_slot();
+      }
     }
     return true;
+  }
+
+  // 第一次走到后门：门缝里那一叠纸
+  async show_receipt_slot() {
+    this._emit(`<span class="ev">你第一次走到后门，看见门缝下面塞着一叠纸，纸边露出来一截。</span>`);
+    const line = await doorRead();
+    if (line) {
+      this._emit(`<span class="ev">你抽出一张。上面写着一句：「${escapeHtml(line)}」</span>`);
+      this._emit(`<span class="ev">这笔字可能是陌生的，也可能只是你忘了自己写过；句子里提到的那间屋，你今晚没去过——也可能是你去过，不记得。</span>`);
+      this._emit(`<span class="ev">纸不旧。边上还有新折的痕迹——塞进来没多久。</span>`);
+    } else {
+      this._emit(`<span class="ev">你第一次走到后门，看见门缝下面空着。纸边被磨得发毛 —— 这里常有人往里塞东西，又抽走。</span>`);
+    }
+  }
+
+  // 结局之后：留话。直接回车 = 不留。
+  async submitLeave(raw) {
+    if (this.leaveDone) return;
+    this.leaveDone = true;
+    this.awaitingLeave = false;
+    let line = String(raw || "").replace(/[\r\n\t]/g, " ").trim();
+    if (!line) {
+      this._emit(`<span class="ev">你没留。门缝里的纸，还跟之前一样。</span>`);
+      return;
+    }
+    if (line.length > 40) {
+      this._emit(`<span class="ev">（你那句 ${line.length} 字，门缝只收得下 40 字——下面这句就是递给下一个人的样子：）</span>`);
+      line = line.slice(0, 40);
+      this._emit(`<span class="ev">　「${escapeHtml(line)}」</span>`);
+    }
+    const ok = await doorWrite(line);
+    if (ok) {
+      this._emit(`<span class="ev">你把纸折一下，塞进门缝。若走到后门，可能看到它；没走到，替写者也可能把它抄进本子。</span>`);
+    } else {
+      this._emit(`<span class="warn">塞不进去。这个门缝现在不通。</span>`);
+    }
   }
 
   write(text) {
@@ -824,6 +873,13 @@ class BenziGame {
     this._emit(`<div class="end-body">${this.ending_text(code).join("\n")}</div>`);
     this._emit(`<div class="report">${this.report()}</div>`);
     this._emit(`<span class="ev">（再来一局：点「换一局」；换个布局：地址栏加 ?seed=7）</span>`);
+    if (DOOR_API) {
+      this._emit(`<span class="ev">灯还亮着。本子合上了。</span>`);
+      this._emit(`<span class="ev">后门的门缝里塞着一叠纸。你可以往里面留一句，也可以不留。</span>`);
+      this._emit(`<span class="ev">（四十字以内。直接回车 = 不留。）</span>`);
+      this.awaitingLeave = true;
+      this.leaveDone = false;
+    }
   }
 
   // 命令解析
@@ -895,6 +951,14 @@ class BenziGame {
     if (full) {
       this._emit(`<span class="title">本子背面（走过的地方）</span>`);
       this._emit(this.map_text());
+      // 在后门「看」= 重读门缝最近一张
+      if (this.pos === "2,2" && DOOR_API) {
+        this._emit(`<span class="ev">你低头看门缝。</span>`);
+        doorRead().then(line => {
+          if (line) this._emit(`<span class="ev">最近塞进去的那张写着：「${escapeHtml(line)}」</span>`);
+          else this._emit(`<span class="ev">空着。</span>`);
+        });
+      }
     }
   }
 
@@ -962,13 +1026,50 @@ function render(game) {
 
   // 输入框禁用判断
   const cmd = document.getElementById("cmd");
-  cmd.disabled = !!game.over;
-  if (!game.over) cmd.focus();
+  const canType = !game.over || game.awaitingLeave;
+  cmd.disabled = !canType;
+  cmd.placeholder = game.awaitingLeave
+    ? "四十字以内。直接回车 = 不留。"
+    : "n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退";
+  if (canType) cmd.focus();
+
+  // 留话阶段：快捷按钮全部禁用
+  const btnsEl = document.getElementById("btns");
+  if (btnsEl) {
+    btnsEl.querySelectorAll("button").forEach(b => { b.disabled = !!game.awaitingLeave || !!game.over; });
+  }
 }
 
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ── 门缝：读最近一张 / 塞一张 ───────────────────────────
+async function doorRead() {
+  if (!DOOR_API) return null;
+  try {
+    const r = await fetch(DOOR_API + "/door", { cache: "no-store" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j && j.line) ? String(j.line) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function doorWrite(line) {
+  if (!DOOR_API) return false;
+  try {
+    const r = await fetch(DOOR_API + "/door", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ line }),
+    });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 // ── 启动 ────────────────────────────────────────────────
@@ -1038,6 +1139,7 @@ function serialize(g) {
     door_read: g.door_read,
     wake_marks: g.wake_marks,
     unlocated: g.unlocated,
+    door_seen: g.door_seen,
     _start: g._start,
     savedAt: Date.now(),
   };
@@ -1047,7 +1149,10 @@ function deserialize(obj) {
   const g = Object.create(BenziGame.prototype);
   Object.assign(g, obj);
   g.visited = new Set(obj.visited);
-  g.rng = new Rng(obj.seed);  // RNG 不复用，状态已确定；只对 next_round 以后不再消耗
+  g.rng = new Rng(obj.seed);
+  g.door_seen = !!obj.door_seen;
+  g.awaitingLeave = false;
+  g.leaveDone = false;
   return g;
 }
 
@@ -1095,6 +1200,13 @@ const cmdInput = document.getElementById("cmd");
 cmdInput.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   const v = cmdInput.value;
+  // 结局之后：输入框改成留话，空回车 = 不留
+  if (game.awaitingLeave) {
+    cmdInput.value = "";
+    game.submitLeave(v);
+    render(game);
+    return;
+  }
   if (!v.trim()) return;
   cmdInput.value = "";
   game.play(v);
