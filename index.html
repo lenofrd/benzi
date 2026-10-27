@@ -20,7 +20,7 @@
              "Songti SC", "SimSun", "宋体", serif;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; height: 100%; }
   body {
     background: var(--bg);
     color: var(--ink);
@@ -29,20 +29,24 @@
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    min-height: 100vh;
+    overflow: hidden;
   }
   .wrap {
-    max-width: 1080px;
+    max-width: 1500px;
+    width: 96vw;
+    height: 100%;
     margin: 0 auto;
-    padding: 28px 24px 80px;
+    padding: 16px 20px 16px;
+    display: flex;
+    flex-direction: column;
   }
   header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     border-bottom: 2px solid var(--ink);
-    padding-bottom: 10px;
-    margin-bottom: 22px;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
     flex-wrap: wrap;
     gap: 8px;
   }
@@ -60,16 +64,32 @@
   #status {
     color: var(--dim);
     font-size: 14px;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
     border-left: 3px solid var(--hi);
     padding-left: 10px;
   }
   .grid {
     display: grid;
-    grid-template-columns: 1.05fr 1fr;
-    gap: 26px;
-    align-items: start;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 22px;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
   }
+  .col-left {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .col-left #now-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .col-left #scene { flex: 1; min-height: 0; height: auto; }
+  .col-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 12px;
+  }
+  .col-right #log-panel { flex: 1; min-height: 0; }
   @media (max-width: 760px) {
     .grid { grid-template-columns: 1fr; }
     .wrap { padding: 18px 14px 80px; }
@@ -79,8 +99,12 @@
   .panel {
     background: var(--paper);
     border: 1px solid var(--paper-edge);
-    padding: 18px 20px;
+    padding: 14px 18px;
     box-shadow: 0 1px 0 var(--paper-edge);
+  }
+  #now-panel {
+    border-color: var(--old-ink);
+    box-shadow: 0 2px 12px rgba(44, 38, 32, 0.08), 0 1px 0 var(--paper-edge);
   }
   .panel h2 {
     margin: 0 0 10px;
@@ -114,8 +138,8 @@
   /* 场景画布 */
   .scene {
     width: 100%;
-    height: 340px;
-    margin: 4px 0 16px;
+    height: 280px;
+    margin: 4px 0 12px;
     border: 1px solid var(--paper-edge);
     background: #efe6cf;
     position: relative;
@@ -176,11 +200,11 @@
   .page {
     background: #fffdf4;
     border: 1px solid var(--paper-edge);
-    padding: 10px 10px;
-    min-height: 96px;
+    padding: 8px 10px;
+    min-height: 72px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     position: relative;
   }
   .page.empty { color: var(--dim); font-style: italic; }
@@ -228,13 +252,14 @@
   #log-panel {
     display: flex;
     flex-direction: column;
-    min-height: 380px;
+    flex: 1;
+    min-height: 0;
   }
   #log {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    max-height: 60vh;
-    padding: 14px 16px;
+    padding: 12px 14px;
     background: #fffdf4;
     border: 1px solid var(--paper-edge);
     font-family: var(--serif);
@@ -338,7 +363,7 @@
   </header>
   <div id="status">第 1/13 次醒来　还剩 13 次</div>
   <div class="grid">
-    <div>
+    <div class="col-left">
       <div class="panel" id="now-panel">
         <h2>现在</h2>
         <div id="scene" class="scene act-1"></div>
@@ -347,14 +372,15 @@
         <div id="room-paper"></div>
         <p id="door-hint" class="door-hint"></p>
       </div>
-      <div class="panel" style="margin-top:14px">
+    </div>
+    <div class="col-right">
+      <div class="panel" id="book-panel">
         <h2>本子</h2>
         <div id="notebook-pages"></div>
         <div id="notebook-state"></div>
         <div id="map"></div>
       </div>
-    </div>
-    <div>
+      <div id="btns"></div>
       <div class="panel" id="log-panel">
         <h2>记</h2>
         <pre id="log"></pre>
@@ -363,7 +389,6 @@
         <input id="cmd" type="text" autocomplete="off" spellcheck="false"
                placeholder="n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退">
       </div>
-      <div id="btns"></div>
       <div class="actions">
         <a id="act-restart">换一局</a>
         <a id="act-help">用法</a>
