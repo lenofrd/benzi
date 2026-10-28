@@ -25,6 +25,7 @@
   展开 <页码>              花一次醒来，把折起页展开
   没记 <一句话>            记下「知道但没写」的事（不花醒来，最多 5 条）
   看                       看屋里和本子（这个不花醒来）
+  门缝                     在后门翻最近十条留话（不花醒来；要联网）
   退                       合上本子
 
 用法：
@@ -42,6 +43,23 @@
   python notebook.py --no-fold          关掉折叠（退回 v0.4.1 行为）
   python notebook.py --echo always      本局必出回声页（auto|never）
   python notebook.py --version          版本
+
+门缝（所有玩过的人共用的一个投递口）：
+  三种来源，任选一种：
+    1) 远程（跨机器，和网页版共用同一个池）：
+         python notebook.py --door https://你的worker.workers.dev
+       国内直连 workers.dev 通常不通，先开代理/VPN；urllib 会自动读
+       HTTPS_PROXY / HTTP_PROXY 环境变量，或系统代理设置。
+    2) 本地单文件（同一台机器）：
+         python notebook.py --door 门缝/留话.txt
+    3) 本地目录（一人一份文件，同一个目录里的人都能读到）：
+         python notebook.py --inbox 门缝/inbox
+  怎么用：
+    · 一局结束后可以留一句话（最多 40 字），直接回车 = 不留。
+    · 走到后门（西南角）时，自动抽到最近塞进去的那一张。
+    · 在后门输入「门缝」，翻最近十条 + 总条数。
+    · 门缝里的话不归你管，可能被抄进别人的本子，也可能被挤掉。
+  注：远程门缝连不上时只打灰字提示，不会影响游戏本身。
 """
 import json
 import os
@@ -708,6 +726,22 @@ class DoorStore:
             print(f"[门缝] 没写进去：{os.path.basename(self.path)}")
             return False
 
+    def list_recent(self, n=10):
+        """最近 n 条 + 总数；读不到返回 None。"""
+        if not self.enabled:
+            return None
+        try:
+            with open(self.path, "r", encoding="utf-8", errors="replace") as f:
+                lines = [ln.strip() for ln in f.read().splitlines()]
+        except FileNotFoundError:
+            return {"items": [], "count": 0}
+        except OSError:
+            return None
+        lines = [ln for ln in lines if ln]
+        total = len(lines)
+        items = [{"line": t, "ts": None} for t in reversed(lines[-n:])]
+        return {"items": items, "count": total}
+
 
 class InboxStore:
     """跨机器门缝：一人一份文件，读的时候按固定规则排序。
@@ -816,6 +850,19 @@ class InboxStore:
             print(f"[门缝] 没写进去：{os.path.basename(self.path)}")
             return False
 
+    def list_recent(self, n=10):
+        """最近 n 条 + 总数；读不到返回 None。"""
+        if not self.enabled:
+            return None
+        entries = []
+        for fn in self._files():
+            meta = self._meta(fn)
+            if meta and meta["body"]:
+                entries.append(meta)
+        entries.sort(key=lambda e: (e["ts"], e["file"]), reverse=True)
+        items = [{"line": e["body"][0], "ts": e["ts"].timestamp()} for e in entries[:n]]
+        return {"items": items, "count": len(entries)}
+
     def mark_read(self, filename):
         """读状态记在读的人这边；绝不在别人的文件上做标记。"""
         try:
@@ -902,6 +949,25 @@ class HttpDoorStore:
         except Exception as exc:
             self._fail(exc)
             return False
+
+    def list_recent(self, n=10):
+        """最近 n 条 + 总数；连不上返回 None。"""
+        if not self.enabled:
+            return None
+        try:
+            url = f"{self.path}?list={int(n)}"
+            req = urllib.request.Request(url, method="GET", headers=self._HEADERS)
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            items = []
+            for it in (data or {}).get("items") or []:
+                text = _one_line(it.get("line", ""))
+                if text:
+                    items.append({"line": text, "ts": it.get("ts")})
+            return {"items": items, "count": int((data or {}).get("count") or 0)}
+        except Exception as exc:
+            self._fail(exc)
+            return None
 
     def _host(self):
         try:
@@ -1074,6 +1140,33 @@ class Notebook:
                     print(f"{C['dim']}你低头看门缝。空着。{C['off']}")
             self.banner("本子背面（走过的地方）")
             print(self.map_text())
+
+    def door_history(self, n=10):
+        """在后门翻门缝：最近 n 条留话。不花醒来。"""
+        if self.pos != (2, 2):
+            print(f"{C['dim']}只有站在后门口，才翻得到门缝里那一叠。{C['off']}")
+            return
+        store = self.door if self._door_enabled() else None
+        if store is None or not hasattr(store, "list_recent"):
+            if self._receipt_enabled():
+                store = self.receipt
+            else:
+                print(f"{C['dim']}门缝关着。这一局没有留话可翻。{C['off']}")
+                return
+        data = store.list_recent(n)
+        if data is None:
+            print(f"{C['rd']}门缝现在不通。（多半是网络问题，开代理/VPN 再试。）{C['off']}")
+            return
+        items = data.get("items") or []
+        if not items:
+            print(f"{C['dim']}你把那一叠纸翻到底。一张也没有。{C['off']}")
+            return
+        print(f"{C['dim']}你把门缝里那一叠翻过来，最近的几张：{C['off']}")
+        for i, it in enumerate(items, 1):
+            print(f"{C['dim']}  {i}. 「{it['line']}」{C['off']}")
+        total = int(data.get("count") or 0)
+        if total > len(items):
+            print(f"{C['dim']}（共 {total} 张，这里只翻最近的 {len(items)} 张。）{C['off']}")
 
     # ── 回合推进 ─────────────────────────────────────────
     def next_round(self):
@@ -1398,6 +1491,9 @@ class Notebook:
             elif head in ("看", "look", "l"):
                 self.show(full=True)
                 continue
+            elif head in ("门缝", "door"):
+                self.door_history(10)
+                continue
             elif head in ARROWS:
                 acted = self.move(head)
             elif head in ("写", "write"):
@@ -1427,7 +1523,7 @@ class Notebook:
                     print(f"{C['dim']}没记 <一句话>。{C['off']}")
                 continue
             else:
-                print(f"{C['dim']}不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，展开 <页码>，没记 <话>，看，退。{C['off']}")
+                print(f"{C['dim']}不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，展开 <页码>，没记 <话>，看，门缝，退。{C['off']}")
                 print(f"{C['dim']}后门要三张原话，还要你验过一页。{C['off']}")
                 continue
             if acted:
