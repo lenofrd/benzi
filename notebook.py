@@ -1052,6 +1052,18 @@ class Notebook:
     def banner(self, s):
         print(f"\n{C['b']}{s}{C['off']}")
 
+    def cmd_hint(self):
+        """每次输入前的操作提醒。门缝只在站在后门时出现。"""
+        items = ["n/s/e/w 走", "写 <话>", "抄", "验 <页码>", "展开 <页码>",
+                 "没记 <话>", "看"]
+        note = ""
+        if (self.pos == (2, 2) and self._door_enabled()
+                and hasattr(self.door, "list_recent")):
+            items.append("门缝")
+            note = "　（门缝：翻最近十条留话）"
+        items.append("退")
+        return f"{C['dim']}命令：{'　'.join(items)}{note}{C['off']}"
+
     def map_text(self):
         """本子背面：走过的地方。"""
         rows = []
@@ -1248,8 +1260,6 @@ class Notebook:
             self.log.append(("door_empty", self.round))
             print(f"{C['dim']}你第一次走到后门，看见门缝下面空着。"
                   f"纸边被磨得发毛 —— 这里常有人往里塞东西，又抽走。{C['off']}")
-        if hasattr(self.door, "list_recent") or hasattr(self.receipt, "list_recent"):
-            print(f"{C['dim']}（输入「门缝」，能往前翻最近十条。）{C['off']}")
 
     def write(self, text):
         if len(text) > 60:
@@ -1473,15 +1483,12 @@ class Notebook:
         print(f"{C['b']}　　本　　子　　{C['off']}")
         print(f"{C['dim']}{WAKES} 次醒来。三页纸。三张原话。{C['off']}")
         print(f"{C['dim']}走一步、写一句、抄一句、验一页、展开一页，各花掉一次醒来。看和没记，不花。{C['off']}")
-        print(f"{C['dim']}命令：n/s/e/w 走　写 <话>　抄　验 <页码>　展开 <页码>　"
-              f"没记 <话>　看　门缝　退{C['off']}")
-        if self._door_enabled():
-            print(f"{C['dim']}走到后门（东北角）时，输入「门缝」能翻最近十条留话。{C['off']}")
         print(f"{C['cy']}{'═' * 46}{C['off']}")
         while not self.over:
             self.show()
+            print("\n" + self.cmd_hint())
             try:
-                cmd = input(f"\n{C['b']}> {C['off']}").strip()
+                cmd = input(f"{C['b']}> {C['off']}").strip()
             except (EOFError, KeyboardInterrupt):
                 print("\n（醒了。）")
                 print(f"\n{self.report()}")
