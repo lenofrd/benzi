@@ -1038,6 +1038,7 @@ class BenziGame {
         this._emit(`<span class="ev">（四十字以内。直接回车 = 不留。）</span>`);
         this.awaitingLeave = true;
         this.leaveDone = false;
+        render(this); // 重新渲染，启用输入框进入留话模式
       }
     }, ENDING_DURATION);
   }
@@ -1575,11 +1576,13 @@ function render(game) {
   document.getElementById("room-name").textContent = name;
   document.getElementById("room-desc").textContent = desc;
 
-  // 场景画布（按房间+幕切换）
-  const act = game.act();
-  const scene = document.getElementById("scene");
-  scene.className = "scene act-" + act;
-  scene.innerHTML = `<span class="act-label">${actLabel(act)}</span>` + sceneSvg(game.pos, act);
+  // 场景画布（按房间+幕切换）；结局后不覆盖结局动画
+  if (!game.over) {
+    const act = game.act();
+    const scene = document.getElementById("scene");
+    scene.className = "scene act-" + act;
+    scene.innerHTML = `<span class="act-label">${actLabel(act)}</span>` + sceneSvg(game.pos, act);
+  }
 
   // 门缝提示：到后门时在"现在"面板底部给一句
   const hint = document.getElementById("door-hint");
