@@ -1248,6 +1248,8 @@ class Notebook:
             self.log.append(("door_empty", self.round))
             print(f"{C['dim']}你第一次走到后门，看见门缝下面空着。"
                   f"纸边被磨得发毛 —— 这里常有人往里塞东西，又抽走。{C['off']}")
+        if hasattr(self.door, "list_recent") or hasattr(self.receipt, "list_recent"):
+            print(f"{C['dim']}（输入「门缝」，能往前翻最近十条。）{C['off']}")
 
     def write(self, text):
         if len(text) > 60:
@@ -1471,6 +1473,10 @@ class Notebook:
         print(f"{C['b']}　　本　　子　　{C['off']}")
         print(f"{C['dim']}{WAKES} 次醒来。三页纸。三张原话。{C['off']}")
         print(f"{C['dim']}走一步、写一句、抄一句、验一页、展开一页，各花掉一次醒来。看和没记，不花。{C['off']}")
+        print(f"{C['dim']}命令：n/s/e/w 走　写 <话>　抄　验 <页码>　展开 <页码>　"
+              f"没记 <话>　看　门缝　退{C['off']}")
+        if self._door_enabled():
+            print(f"{C['dim']}走到后门（东北角）时，输入「门缝」能翻最近十条留话。{C['off']}")
         print(f"{C['cy']}{'═' * 46}{C['off']}")
         while not self.over:
             self.show()
