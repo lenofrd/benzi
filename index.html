@@ -280,6 +280,32 @@
   .page .body.piece { color: var(--piece); }
   .page .body.fake { color: var(--fake); }
   .page .body.old { color: var(--old-ink); }
+  .page .body.folded {
+    color: var(--dim);
+    position: relative;
+    padding: 2px 0;
+    overflow: hidden;
+    max-height: 3.2em;
+  }
+  /* 折痕：横在页面中间的一道旧疤 */
+  .page .body.folded::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    border-top: 1px dashed rgba(90, 77, 58, 0.45);
+    box-shadow: 0 1px 0 rgba(251, 246, 233, 0.8);
+  }
+  /* 展开过的页：折痕还在，字全回来 */
+  .page .body.unfolded-scar {
+    position: relative;
+  }
+  .page .body.unfolded-scar::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    border-top: 1px dashed rgba(90, 77, 58, 0.22);
+    pointer-events: none;
+  }
   .page .tag {
     font-size: 11px;
     letter-spacing: 0.1em;
@@ -648,6 +674,27 @@ const ENDINGS = {
   ],
 };
 
+// C 的折叠变体：同一判定，展示页换成折起页的大意。优先级 折叠 > 普通（回声未实现）。
+const C_FOLD = [
+  "第 {wakes} 次醒来用完了。",
+  "",
+  "你还在{room}。本子摊开着，第 {page_no} 页不是一张整纸，是一个对折。",
+  "",
+  "面上只有一行小字，不是手写的：「（大意）{gist}」",
+  "",
+  "你读过它，读的时候它还整着。墨是新的，读起来顺，没有编号。",
+  "",
+  "后来它被折了。折的时候没问你，也没有人问。你也没展开 —— 展开要花一次醒来，你那几次醒来在走路。",
+  "",
+  "现在你只能读到这一句。剩下的句子还在折里，压着，边上透出一点墨。",
+  "",
+  "你不知道它原来写的是什么。本子知道。本子不说。",
+  "",
+  "大意也不是原文的缩写，是原文的头十二个字，断在哪它不管。断在一个「不」字前面，读起来就是反过来的一句 —— 你没读过原文，对不出来。",
+  "",
+  "会有人读到大意，然后照着大意走。",
+];
+
 // ── Mulberry32 RNG：复刻 random.Random(seed) 行为 ──────
 class Rng {
   constructor(seed) {
@@ -734,7 +781,27 @@ class BenziGame {
     return rows.join("\n");
   }
 
-  // 假页 / 普通页推进 —— P0 不做折、不做回声
+  // 折叠的大意：原文清洗后取前 12 字 + ……。截断不是概括，断在哪它不管。
+  static _gist(text) {
+    const clean = String(text).split(/\s+/).filter(Boolean).join(" ");
+    return clean.slice(0, 12) + "……";
+  }
+
+  // 每 4 次醒来折一页：最旧、非原话、没折过的页。没有就跳过。
+  foldOldest() {
+    const idx = this.pages.findIndex(p => !p.piece && !p.ever_folded);
+    if (idx === -1) return null;
+    const p = this.pages[idx];
+    p.folded = true;
+    p.ever_folded = true;
+    p.full_text = p.text;
+    p.gist = BenziGame._gist(p.text);
+    p.text = `（折起来的一页。大意：${p.gist}）`;
+    this.log.push(["fold", this.round, idx + 1]);
+    return idx;
+  }
+
+  // 假页 / 普通页推进；第 4、8、12 次醒来之后折一页
   next_round() {
     this.round += 1;
     if (this.round > WAKES) { this.over = "lose"; return; }
@@ -743,6 +810,10 @@ class BenziGame {
       if (this.push(fake, { ink: 0, real: false })) {
         this.log.push(["fake", this.round]);
       }
+    }
+    // 假页之后再折，折的是「最旧的非原话、未折过的页」
+    if (this.round % 4 === 0) {
+      this.foldOldest();
     }
   }
 
@@ -931,6 +1002,41 @@ class BenziGame {
     return this.log.some(e => e[0] === "check" || e[0] === "caught");
   }
 
+  // 展开折起页：花 1 次醒来，恢复原文（acted 流程会推进回合）
+  unfold(i) {
+    if (!(1 <= i && i <= this.pages.length)) {
+      this._emit(`<span class="ev">没有这一页。</span>`);
+      return false;
+    }
+    const p = this.pages[i - 1];
+    if (!p.folded) {
+      this._emit(`<span class="ev">这一页没有折。</span>`);
+      return false;
+    }
+    p.folded = false;
+    p.text = p.full_text;
+    this.wake_marks.unfold += 1;
+    this.log.push(["unfold", i]);
+    this._emit(`<span class="ev">你花一次醒来，把折痕抹开。</span>`);
+    this._emit(`<span class="ev">字回来了，一个不少。折痕留着，横在页面中间，像一道旧疤。</span>`);
+    return true;
+  }
+
+  // 没记：免费、不推进、最多 5 条（超出挤最早）
+  noteUnlocated(text) {
+    if (!text) {
+      this._emit(`<span class="ev">没记什么？没记 <一句话>。</span>`);
+      return false;
+    }
+    if (this.unlocated.length >= 5) {
+      this.unlocated.shift();
+      this._emit(`<span class="ev">未定位最多五条，最早的一条被挤掉了。</span>`);
+    }
+    this.unlocated.push(text.slice(0, 60));
+    this._emit(`<span class="ev">你把它写下手边那张纸。不写进本子。未定位 ${this.unlocated.length} 条。</span>`);
+    return true;
+  }
+
   // 当前幕：1 醒来 / 2 发现替写 / 3 集原话回门厅
   act() {
     if (this.pieces.length >= PIECES_NEEDED) return 3;
@@ -993,10 +1099,22 @@ class BenziGame {
         : (evicts.filter(e => e[2] && !e[3]).map(e => e[1])[0] || "（读不出来了）");
       vals.evicted_own = own;
     } else if (code === "C") {
-      // P0 无折叠、无回声：直接取第一个 not real 页
-      let idx = -1;
+      // 优先级：折起页 > 第一个 not real 页（回声未实现）
+      // 只把「折起的非原话页」当 C 的展示页：C_FOLD 说的是不是你写的字。
+      let foldIdx = -1;
       for (let i = 0; i < this.pages.length; i++) {
-        if (!this.pages[i].real) { idx = i + 1; break; }
+        if (this.pages[i].folded && !this.pages[i].real) { foldIdx = i + 1; break; }
+      }
+      let idx = -1;
+      if (foldIdx !== -1) {
+        template = C_FOLD;
+        idx = foldIdx;
+        const fp = this.pages[idx - 1];
+        vals.gist = fp.gist || BenziGame._gist(fp.full_text || fp.text);
+      } else {
+        for (let i = 0; i < this.pages.length; i++) {
+          if (!this.pages[i].real) { idx = i + 1; break; }
+        }
       }
       vals.page_no = idx;
       vals.page_text = this.pages[idx - 1].text;
@@ -1102,8 +1220,15 @@ class BenziGame {
     } else if (head === "验" || head === "verify") {
       if (/^\d+$/.test(rest.trim())) acted = this.verify(parseInt(rest.trim()));
       else { this._emit(`<span class="ev">验 <页码>。</span>`); return; }
+    } else if (head === "展开" || head === "unfold") {
+      if (/^\d+$/.test(rest.trim())) acted = this.unfold(parseInt(rest.trim()));
+      else { this._emit(`<span class="ev">展开 <页码>。（只有折起来的页能展开。）</span>`); return; }
+    } else if (head === "没记" || head === "未定位" || head === "note") {
+      if (rest.trim()) this.noteUnlocated(rest.trim());   // 免费：不花醒来，不推进回合
+      else this._emit(`<span class="ev">没记 <一句话>。（记你知道、但没写下来的事。不花醒来。）</span>`);
+      return;
     } else {
-      this._emit(`<span class="ev">不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，看，门缝，退。</span>`);
+      this._emit(`<span class="ev">不认识。n/s/e/w 走，写 <话>，抄，验 <页码>，展开 <页码>，没记 <话>，看，门缝，退。</span>`);
       this._emit(`<span class="ev">后门要三张原话，还要你验过一页。</span>`);
       return;
     }
@@ -1134,7 +1259,8 @@ class BenziGame {
     this._emit(`<span class="title">本子</span>`);
     this.pages.forEach((p, i) => {
       const tag = p.piece ? `[原话] ` : "";
-      this._emit(`  ${i + 1}. ${tag}${p.text}`);
+      const fold = p.folded ? `（折起） ` : "";
+      this._emit(`  ${i + 1}. ${fold}${tag}${p.text}`);
     });
     if (this.pieces.length > 0) {
       this._emit(`<span class="ev">已抄原话 ${this.pieces.length}/${PIECES_NEEDED}</span>`);
@@ -1648,7 +1774,9 @@ function render(game) {
     } else {
       let bodyClass = "body";
       let tag = "";
-      if (p.piece) { bodyClass += " piece"; tag = `[原话]`; }
+      if (p.folded) { bodyClass += " folded"; tag = `[折起]`; }
+      else if (p.ever_folded) { bodyClass += " unfolded-scar"; tag = `[展开过]`; }
+      else if (p.piece) { bodyClass += " piece"; tag = `[原话]`; }
       else if (!p.real) { bodyClass += " fake"; tag = `[墨迹新]`; }
       else if (p.ink === 0) { bodyClass += " old"; tag = `[旧墨]`; }
       else { tag = `[第${p.ink}页]`; }
@@ -1676,8 +1804,8 @@ function render(game) {
   cmd.placeholder = game.awaitingLeave
     ? "四十字以内。直接回车 = 不留。"
     : (game.pos === "2,2"
-       ? "门缝 · n/s/e/w · 写 · 抄 · 验 <页码> · 看 · 退"
-       : "n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 看 · 退");
+       ? "门缝 · n/s/e/w · 写 · 抄 · 验 <页码> · 展开 <页码> · 没记 · 看 · 退"
+       : "n/s/e/w · 写 <一句话> · 抄 · 验 <页码> · 展开 <页码> · 没记 <一句话> · 看 · 退");
   if (canType) cmd.focus();
 
   // 留话阶段：快捷按钮全部禁用
@@ -1746,7 +1874,7 @@ function newGame(seed) {
   game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
   game._emit(`<span class="title">　　本　　子</span>`);
   game._emit(`<span class="ev">${WAKES} 次醒来。三页纸。三张原话。</span>`);
-  game._emit(`<span class="ev">走一步、写一句、抄一句、验一页，各花掉一次醒来。看不花。</span>`);
+  game._emit(`<span class="ev">走一步、写一句、抄一句、验一页、展开一页，各花掉一次醒来。看和没记，不花。</span>`);
   game._emit(`<span class="ev">后门有条缝。走到后门，输入「门缝」，能看见所有人在这条缝里留过的话。</span>`);
   game._emit(`<span class="ev">（门缝连着门外很远的邮筒，要联网；国内网络通常先开代理/VPN 才能用。翻不到不是门坏了。）</span>`);
   game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
@@ -1915,9 +2043,14 @@ document.getElementById("act-help").addEventListener("click", () => {
   写 &lt;一句话&gt;            写进本子（最多 60 字；满页挤掉最旧的非原话）
   抄                       把面前的原话抄进本子
   验 &lt;页码&gt;                验那页的墨迹是谁的（假页会被撕掉，腾一页）
+  展开 &lt;页码&gt;              把折起来的页抹开（花一次醒来；折痕留着，这页之后能验）
+  没记 &lt;一句话&gt;            记下「知道但没写」的事（不花醒来，不占页；最多五条）
   看                       看屋里和本子（不花醒来）；在后门可重读门缝
   门缝                     在后门翻最近的十条留话
   退                       合上本子，结束本局
+
+本子会自己折页：第 4、8、12 次醒来之后，最旧的一页非原话被对折，
+只剩开头十二个字的大意。折起的页验不了；原话永不折。
 
 后门在东北角，要三张原话，还要你亲手验过一页墨迹。
 十三次醒来。用完了不是死，是这一天到此为止。
