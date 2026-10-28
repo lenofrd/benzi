@@ -1657,10 +1657,13 @@ function escapeHtml(s) {
 }
 
 // ── 门缝：读最近一张 / 翻历史 / 塞一张 ───────────────────
+// 8 秒超时：后端不可达时快速失败，避免 fetch 挂一两分钟
+const DOOR_TIMEOUT_MS = 8000;
+
 async function doorRead() {
   if (!DOOR_API) return null;
   try {
-    const r = await fetch(DOOR_API + "/door", { cache: "no-store" });
+    const r = await fetch(DOOR_API + "/door", { cache: "no-store", signal: AbortSignal.timeout(DOOR_TIMEOUT_MS) });
     if (!r.ok) return null;
     const j = await r.json();
     return (j && j.line) ? String(j.line) : null;
@@ -1673,7 +1676,7 @@ async function doorRead() {
 async function doorList(n) {
   if (!DOOR_API) return null;
   try {
-    const r = await fetch(`${DOOR_API}/door?list=${n}`, { cache: "no-store" });
+    const r = await fetch(`${DOOR_API}/door?list=${n}`, { cache: "no-store", signal: AbortSignal.timeout(DOOR_TIMEOUT_MS) });
     if (!r.ok) return null;
     const j = await r.json();
     return { items: Array.isArray(j.items) ? j.items : [], count: j.count | 0 };
@@ -1689,6 +1692,7 @@ async function doorWrite(line) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ line }),
+      signal: AbortSignal.timeout(DOOR_TIMEOUT_MS),
     });
     return r.ok;
   } catch (e) {
