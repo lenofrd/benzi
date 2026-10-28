@@ -123,11 +123,13 @@
     color: var(--ink);
     font-weight: 600;
     letter-spacing: 0.1em;
+    text-shadow: 0 0 8px rgba(251, 246, 233, 0.95), 0 0 3px rgba(251, 246, 233, 1);
   }
   #room-desc {
     margin: 0 0 14px;
     color: var(--ink);
     font-style: italic;
+    text-shadow: 0 0 8px rgba(251, 246, 233, 0.95), 0 0 3px rgba(251, 246, 233, 1);
   }
   #room-paper {
     margin: 0 0 14px;
@@ -135,17 +137,35 @@
     border-top: 1px dashed var(--line);
     padding-top: 10px;
     white-space: pre-wrap;
+    text-shadow: 0 0 8px rgba(251, 246, 233, 0.95), 0 0 3px rgba(251, 246, 233, 1);
   }
   #room-paper .label { color: var(--dim); font-style: italic; }
   /* 场景画布 */
   .scene {
     position: absolute;
     inset: 0;
-    opacity: 0.32;
     pointer-events: none;
     z-index: 0;
   }
-  .scene svg { display: block; width: 100%; height: 100%; }
+  /* AI 底图：做整块的底 */
+  .scene-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.74;
+    z-index: 0;
+  }
+  /* 手绘 SVG 房间层：半透明叠在图上，像一张描图纸 */
+  .scene-svg-wrap {
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    z-index: 1;
+  }
+  .scene > svg { display: block; width: 100%; height: 100%; }
+  .scene svg.act-overlay { z-index: 2; opacity: 0.9; }
   .scene .act-label {
     position: absolute;
     top: 10px;
@@ -153,7 +173,9 @@
     font-size: 12px;
     letter-spacing: 0.2em;
     color: var(--dim);
-    opacity: 0.7;
+    opacity: 0.85;
+    z-index: 3;
+    text-shadow: 0 0 6px rgba(244, 236, 214, 0.9), 0 0 2px rgba(244, 236, 214, 1);
   }
   @keyframes lamp-flicker {
     0%, 100% { opacity: 0.85; }
@@ -1147,9 +1169,22 @@ function fmt(line, vals) {
 }
 
 // ── UI 渲染：把当前 game 状态画到右侧面板 ───────────────
-// 场景 = 房间背景 + 幕叠加层
+// 场景 = AI 底图 + 手绘 SVG 描图纸层 + 幕叠加层
+const ROOM_BG = {
+  "0,0": "img/room-hall.jpg", "0,1": "img/room-corridor.jpg",
+  "0,2": "img/room-attic.jpg", "1,0": "img/room-storage.jpg",
+  "1,1": "img/room-living.jpg", "1,2": "img/room-study.jpg",
+  "2,0": "img/room-boiler.jpg", "2,1": "img/room-kitchen.jpg",
+  "2,2": "img/room-backdoor.jpg",
+};
+function sceneBg(pos, cls = "scene-bg") {
+  const src = ROOM_BG[pos] || ROOM_BG["0,0"];
+  return `<img class="${cls}" src="${src}" alt="">`;
+}
 function sceneSvg(pos, act) {
-  return sceneRoom(pos) + actOverlay(act, pos);
+  return sceneBg(pos)
+    + `<div class="scene-svg-wrap">` + sceneRoom(pos) + `</div>`
+    + actOverlay(act, pos);
 }
 
 // 九个房间背景（严格按剧本描述）
@@ -1433,7 +1468,7 @@ function inkOverlay(pos) {
     "2,2": {x:200, y:120},  // 后门：门上
   };
   const s = spots[pos] || spots["0,0"];
-  return `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+  return `<svg class="act-overlay" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
     <defs><filter id="ib"><feGaussianBlur stdDeviation="1"/></filter></defs>
     <ellipse class="ink" cx="${s.x}" cy="${s.y}" rx="45" ry="14" fill="#2c2620" opacity="0.65" filter="url(#ib)"/>
     <ellipse class="ink" cx="${s.x}" cy="${s.y}" rx="30" ry="9" fill="#1a1612" opacity="0.8" filter="url(#ib)" style="animation-delay:1.2s"/>
@@ -1444,7 +1479,7 @@ function inkOverlay(pos) {
 
 // 幕三：三张原话纸片漂浮
 function piecesOverlay(pos) {
-  return `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+  return `<svg class="act-overlay" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
     <g class="paper1" style="transform-origin:center">
       <rect x="70" y="80" width="100" height="36" fill="#f3ead0" stroke="#c9bd9f" stroke-width="0.8" transform="rotate(-5 120 98)"/>
       <line x1="78" y1="92" x2="155" y2="92" stroke="#8b5a2b" stroke-width="1.1" transform="rotate(-5 120 98)"/>
@@ -1466,13 +1501,20 @@ function actLabel(act) {
   return act === 3 ? "第三幕 · 集原话" : act === 2 ? "第二幕 · 发现替写" : "第一幕 · 醒来";
 }
 
-// 七结局 15 秒动画背景（SVG + CSS 动画，文本作字幕）
+// 七结局 15 秒动画背景（AI 底图 + 暗纱 + SVG 动画，文本作字幕）
 const ENDING_DURATION = 15000;
+const END_BG = { A:"img/end-a.jpg", B:"img/end-b.jpg", C:"img/end-c.jpg",
+                 D:"img/end-d.jpg", E:"img/end-e.jpg", F:"img/end-f.jpg", G:"img/end-g.jpg" };
 function endingAnim(code) {
-  const wrap = (inner, extraCls="") => `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" class="end-anim ${extraCls}" style="position:absolute;inset:0;width:100%;height:100%">${inner}</svg>`;
+  // 暗纱：A/B 晨光透得多，G（笔没墨）最沉
+  const VEIL = { A:0.28, B:0.28, C:0.42, D:0.36, E:0.40, F:0.42, G:0.52 };
+  const veil = VEIL[code] ?? 0.38;
+  const wrap = (inner, extraCls="") =>
+    (END_BG[code] ? `<img class="scene-bg end-bg" src="${END_BG[code]}" alt="">` : "") +
+    `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" class="end-anim ${extraCls}" style="position:absolute;inset:0;width:100%;height:100%">` +
+    `<rect width="400" height="300" fill="#241f18" opacity="${veil}"/>${inner}</svg>`;
   switch (code) {
     case "A": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 后门缓缓打开，晨光涌入 -->
       <rect x="120" y="20" width="160" height="260" fill="#1a1612" class="end-door-l"/>
       <rect x="280" y="20" width="0" height="260" fill="#1a1612" class="end-door-r"/>
@@ -1488,7 +1530,6 @@ function endingAnim(code) {
       <ellipse cx="60" cy="60" rx="40" ry="50" fill="#f4e4b8" opacity="0.4" class="end-lamp"/>
     `, "end-a");
     case "B": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <rect x="120" y="20" width="160" height="260" fill="#1a1612" class="end-door-l"/>
       <rect x="120" y="20" width="160" height="260" fill="#f4e4b8" class="end-light" opacity="0"/>
       <!-- 三张不一样的纸漂浮 -->
@@ -1498,7 +1539,6 @@ function endingAnim(code) {
       <ellipse cx="60" cy="60" rx="40" ry="50" fill="#f4e4b8" opacity="0.4" class="end-lamp"/>
     `, "end-b");
     case "C": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 假页墨迹在扩散 -->
       <rect x="80" y="80" width="240" height="140" fill="#fbf6e9" stroke="#c9bd9f"/>
       <ellipse cx="200" cy="150" rx="60" ry="18" fill="#2c2620" opacity="0.7" class="end-ink"/>
@@ -1507,7 +1547,6 @@ function endingAnim(code) {
       <ellipse cx="200" cy="250" rx="50" ry="10" fill="#5a4d3a" opacity="0.4"/>
     `, "end-c");
     case "D": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 指缝里验过的纸 -->
       <g class="end-hand">
         <rect x="160" y="120" width="80" height="100" rx="10" fill="#6b5e45"/>
@@ -1526,7 +1565,6 @@ function endingAnim(code) {
       <ellipse cx="60" cy="60" rx="40" ry="50" fill="#f4e4b8" opacity="0.3" class="end-lamp"/>
     `, "end-d");
     case "E": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 远处的门，锁舌退了一半 -->
       <rect x="140" y="40" width="120" height="220" fill="#5a4d3a" opacity="0.6"/>
       <rect x="195" y="120" width="10" height="20" fill="#8a7a55" class="end-lock"/>
@@ -1539,7 +1577,6 @@ function endingAnim(code) {
       <ellipse cx="320" cy="60" rx="40" ry="50" fill="#f4e4b8" opacity="0.3" class="end-lamp"/>
     `, "end-e");
     case "F": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 笔尖悬在纸上，写不进 -->
       <rect x="80" y="120" width="240" height="120" fill="#fbf6e9" stroke="#c9bd9f"/>
       <g class="end-pen">
@@ -1552,7 +1589,6 @@ function endingAnim(code) {
       <line x1="150" y1="200" x2="245" y2="200" stroke="#2c2620" stroke-width="1" opacity="0" class="end-write-fail" style="animation-delay:2s"/>
     `, "end-f");
     case "G": return wrap(`
-      <rect width="400" height="300" fill="#3a3328"/>
       <!-- 厨房水滴，碗柜开着 -->
       <rect x="60" y="60" width="120" height="100" fill="#5a4d3a" opacity="0.5"/>
       <ellipse cx="100" cy="110" rx="3" ry="5" fill="#6b8a9b" class="end-drip"/>
