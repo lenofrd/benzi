@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>房间底图预览</title>
+<style>
+  body { font-family: serif; background: #F5EFE0; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; }
+  .g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .c { background: #FBF6E9; border: 1px solid #d8cfb8; padding: 8px; }
+  .c img { width: 100%; display: block; }
+  .c p { margin: 6px 0 2px; font-size: 14px; color: #2C2620; }
+  .c span { font-size: 12px; color: #8a7f73; }
+</style>
+</head>
+<body>
+<h1>九个房间底图（AI 生成 · 统一米黄旧纸张风格）</h1>
+<div class="g" id="g"></div>
+<script>
+const rooms = [
+  ["room-hall.jpg", "门厅", "一盏没关的灯。鞋摆得很齐，只有一双是你的。"],
+  ["room-corridor.jpg", "走廊", "墙上钉着一排钉子，钉子全空着，钉子眼比钉子多。"],
+  ["room-attic.jpg", "阁楼", "很矮，得弯腰。灰上有串脚印，比你的小。"],
+  ["room-storage.jpg", "储藏室", "罐头按年份码着。最外面那罐贴了张纸条：别开。"],
+  ["room-living.jpg", "客厅", "沙发凹下去一个坑，像刚有人坐过，还没凉。"],
+  ["room-study.jpg", "书房", "桌上摊着这本本子，只剩三页。"],
+  ["room-boiler.jpg", "锅炉房", "热。管道里有声音，像有人在很远的地方说话。"],
+  ["room-kitchen.jpg", "厨房", "水龙头没关紧，一滴一滴。碗柜开着。"],
+  ["room-backdoor.jpg", "后门", "锁着。锁面上有三个槽。槽下面还有一道旧划痕，像刻着一个「验」字。"],
+];
+document.getElementById("g").innerHTML = rooms.map(([f, n, d]) =>
+  `<div class="c"><img src="${f}" loading="lazy"><p>${n}</p><span>${d}</span></div>`
+).join("");
+</script>
+</body>
+</html>
