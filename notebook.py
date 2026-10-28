@@ -890,6 +890,8 @@ class HttpDoorStore:
         https://benzi-door.xxx.workers.dev
     读写失败只警告、不抛异常——和文件门缝一样，不影响游戏本身。
 
+    返回的 ts 是毫秒（Worker 端 Date.now()），Python 端收到后 /1000 再当秒用。
+
     代理：urllib 自动读环境变量 HTTPS_PROXY / HTTP_PROXY 或系统代理；
     国内直连 workers.dev 通常不通，先开代理/VPN。
     """
