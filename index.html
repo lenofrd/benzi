@@ -797,7 +797,7 @@ class BenziGame {
   // 在后门翻门缝：最近 N 张
   async showDoorHistory(n) {
     const r = await doorList(n);
-    if (!r) { this._emit(`<span class="warn">门缝现在不通。</span>`); return; }
+    if (!r) { this._emit(`<span class="warn">门缝现在不通。（多半是网络问题，开代理/VPN 再试。）</span>`); return; }
     if (r.items.length === 0) {
       this._emit(`<span class="ev">你把那一叠纸翻到底。一张也没有。</span>`);
       return;
@@ -830,7 +830,7 @@ class BenziGame {
     if (ok) {
       this._emit(`<span class="ev">你把纸折一下，塞进门缝。若走到后门，可能看到它；没走到，替写者也可能把它抄进本子。</span>`);
     } else {
-      this._emit(`<span class="warn">塞不进去。这个门缝现在不通。</span>`);
+      this._emit(`<span class="warn">塞不进去。这个门缝现在不通。（多半是网络问题，开代理/VPN 再试。）</span>`);
     }
   }
 
@@ -1587,7 +1587,7 @@ function render(game) {
   // 门缝提示：到后门时在"现在"面板底部给一句
   const hint = document.getElementById("door-hint");
   if (game.pos === "2,2" && !game.over) {
-    hint.innerHTML = "后门。门缝里有风——输入「门缝」可翻所有人留过的话。";
+    hint.innerHTML = "后门。门缝里有风——输入「门缝」可翻所有人留过的话。<br>（要联网；翻不到就开代理/VPN 再试。）";
   } else {
     hint.innerHTML = "";
   }
@@ -1712,6 +1712,7 @@ function newGame(seed) {
   game._emit(`<span class="ev">${WAKES} 次醒来。三页纸。三张原话。</span>`);
   game._emit(`<span class="ev">走一步、写一句、抄一句、验一页，各花掉一次醒来。看不花。</span>`);
   game._emit(`<span class="ev">后门有条缝。走到后门，输入「门缝」，能看见所有人在这条缝里留过的话。</span>`);
+  game._emit(`<span class="ev">（门缝连着门外很远的邮筒，要联网；国内网络通常先开代理/VPN 才能用。翻不到不是门坏了。）</span>`);
   game._emit(`<span class="sep">${"═".repeat(46)}</span>`);
   // 第一次 show
   game.show(false);
@@ -1887,7 +1888,9 @@ document.getElementById("act-help").addEventListener("click", () => {
 
 门缝：所有玩过的人共用的投递口。一局结束可以留一句话（最多 40 字），
 走到后门能抽到最近塞进去的那张；输入「门缝」能往前翻。门缝里的话不归你管，
-也可能是别人留的。</span>`;
+也可能是别人留的。
+注意：门缝要联网（服务器在境外），国内网络通常需要开代理/VPN 才能读到或塞进；
+显示「门缝现在不通 / 塞不进去」多半是网络问题，不是坏了。</span>`;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 });
