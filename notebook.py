@@ -35,6 +35,7 @@
   python notebook.py --receipt 回执.md  显式开回执（非交互也开）
   python notebook.py --no-receipt       关掉回执/留话/回声（折叠仍生效）
   python notebook.py --door 留话.txt    指定单文件门缝（兼容旧门缝）
+  python notebook.py --door https://...  远程门缝（Cloudflare Worker，跨机器，与网页版共用）
   python notebook.py --inbox 门缝/inbox  跨机器门缝：一人一份文件
   python notebook.py --pool 原话池.md  指定原话池
   python notebook.py --strict-content   遇到占位原话直接拒绝运行（交付前检查）
@@ -48,6 +49,8 @@ import random
 import re
 import sys
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime
 
 VERSION = "0.5.1"
@@ -828,6 +831,86 @@ class InboxStore:
             pass
 
 
+class HttpDoorStore:
+    """HTTP 门缝：通过 Cloudflare Worker 跨机器共用一个投递口。
+
+    接口与 DoorStore 一致：latest_line() 取最近一条，append(line) 塞一条。
+    路径是 Worker 的完整地址（可只给根，会自动补 /door），例如：
+        https://benzi-door.xxx.workers.dev
+    读写失败只警告、不抛异常——和文件门缝一样，不影响游戏本身。
+
+    代理：urllib 自动读环境变量 HTTPS_PROXY / HTTP_PROXY 或系统代理；
+    国内直连 workers.dev 通常不通，先开代理/VPN。
+    """
+
+    DEFAULT_TIMEOUT = 8
+    _HEADERS = {"User-Agent": f"benzi/{VERSION}"}
+
+    def __init__(self, url, enabled=True, timeout=None):
+        self.path = url.rstrip("/")
+        if not self.path.endswith("/door"):
+            self.path = self.path + "/door"
+        self.enabled = enabled
+        self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
+
+    def _fail(self, exc):
+        """统一错误提示：区分 HTTP 错误和网络不通。"""
+        if isinstance(exc, urllib.error.HTTPError):
+            print(f"{C['dim']}[门缝] 被拒（HTTP {exc.code}，{self._host()}）。{C['off']}")
+        else:
+            print(f"{C['dim']}[门缝] 连不上（{self._host()}）。"
+                  f"多半是网络问题，开代理/VPN 再试。{C['off']}")
+
+    def latest_line(self):
+        """最近一条非空留话；没有返回 None。"""
+        if not self.enabled:
+            return None
+        try:
+            req = urllib.request.Request(self.path, method="GET",
+                                         headers=self._HEADERS)
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            line = (data or {}).get("line")
+            if not line:
+                return None
+            text = _one_line(line)
+            return text or None
+        except Exception as exc:
+            self._fail(exc)
+            return None
+
+    def append(self, line):
+        """塞一条进去；成功返回 True，失败 False。"""
+        if not self.enabled:
+            return False
+        text = _one_line(line)
+        if not text:
+            return False
+        try:
+            body = json.dumps({"line": text}, ensure_ascii=False).encode("utf-8")
+            headers = dict(self._HEADERS)
+            headers["Content-Type"] = "application/json"
+            req = urllib.request.Request(self.path, data=body, method="POST",
+                                         headers=headers)
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            if (data or {}).get("ok"):
+                return True
+            print(f"{C['dim']}[门缝] 塞不进去："
+                  f"{(data or {}).get('error', '未知错误')}{C['off']}")
+            return False
+        except Exception as exc:
+            self._fail(exc)
+            return False
+
+    def _host(self):
+        try:
+            from urllib.parse import urlparse
+            return urlparse(self.path).netloc
+        except Exception:
+            return "远程门缝"
+
+
 class Notebook:
     def __init__(self, seed=None, debug=False, receipt=None, name="你", echo="auto",
                  door=None, clock=None, fold=False, quote_pool=None,
@@ -1518,7 +1601,13 @@ def main(argv=None):
             if inbox_arg:
                 door_store = InboxStore(inbox_arg, name=name or "玩家")
             else:
-                door_store = DoorStore(door_arg or DEFAULT_DOOR_PATH)
+                door_arg_value = door_arg or DEFAULT_DOOR_PATH
+                # --door 给 http(s):// 地址时走远程门缝（Cloudflare Worker），
+                # 和网页版共用同一个跨机器留言池。
+                if door_arg_value.startswith(("http://", "https://")):
+                    door_store = HttpDoorStore(door_arg_value)
+                else:
+                    door_store = DoorStore(door_arg_value)
     try:
         pool = load_quote_pool(quote_arg)
         game = Notebook(seed=seed, debug=debug, receipt=store, name=name, echo=echo,
