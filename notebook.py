@@ -743,7 +743,7 @@ class DoorStore:
             return None
         lines = [ln for ln in lines if ln]
         total = len(lines)
-        items = [{"line": t, "ts": None} for t in reversed(lines[-n:])]
+        items = [{"line": t, "ts": 0.0} for t in reversed(lines[-n:])]
         return {"items": items, "count": total}
 
 
@@ -937,6 +937,8 @@ class HttpDoorStore:
         text = _one_line(line)
         if not text:
             return False
+        # 无重试、无幂等键：网络抖动时「以为失败、其实成功」会重复写。
+        # 这是有意的取舍——门缝本来就不是精确账本，重复一句比丢一句好。
         try:
             body = json.dumps({"line": text}, ensure_ascii=False).encode("utf-8")
             headers = dict(self._HEADERS)
@@ -958,6 +960,7 @@ class HttpDoorStore:
         """最近 n 条 + 总数；连不上返回 None。"""
         if not self.enabled:
             return None
+        print(f"{C['dim']}正在连门缝…{C['off']}")
         try:
             url = f"{self.path}?list={int(n)}"
             req = urllib.request.Request(url, method="GET", headers=self._HEADERS)
@@ -967,7 +970,7 @@ class HttpDoorStore:
             for it in (data or {}).get("items") or []:
                 text = _one_line(it.get("line", ""))
                 if text:
-                    items.append({"line": text, "ts": it.get("ts")})
+                    items.append({"line": text, "ts": float(it.get("ts") or 0.0)})
             return {"items": items, "count": int((data or {}).get("count") or 0)}
         except Exception as exc:
             self._fail(exc)
@@ -984,11 +987,12 @@ class HttpDoorStore:
 class Notebook:
     def __init__(self, seed=None, debug=False, receipt=None, name="你", echo="auto",
                  door=None, clock=None, fold=False, quote_pool=None,
-                 strict_content=False):
+                 strict_content=False, show_hint=True):
         self.quote_pool = quote_pool if quote_pool is not None else load_quote_pool()
         if strict_content and self.quote_pool.placeholder:
             raise ValueError("原话池还是占位内容，不能作为交付版运行")
         self.strict_content = bool(strict_content)
+        self.show_hint = bool(show_hint)
         self.rng = random.Random(seed)
         self.seed = seed
         self.debug = debug
@@ -1170,7 +1174,8 @@ class Notebook:
             return
         store = self.door if self._door_enabled() else None
         if store is None or not hasattr(store, "list_recent"):
-            if self._receipt_enabled():
+            # fallback：回执也可能没有 list_recent（ReceiptStore 没实现）
+            if self._receipt_enabled() and hasattr(self.receipt, "list_recent"):
                 store = self.receipt
             else:
                 print(f"{C['dim']}门缝关着。这一局没有留话可翻。{C['off']}")
@@ -1496,7 +1501,8 @@ class Notebook:
         print(f"{C['cy']}{'═' * 46}{C['off']}")
         while not self.over:
             self.show()
-            print("\n" + self.cmd_hint())
+            if self.show_hint:
+                print("\n" + self.cmd_hint())
             try:
                 cmd = input(f"{C['b']}> {C['off']}").strip()
             except (EOFError, KeyboardInterrupt):
@@ -1661,6 +1667,7 @@ def main(argv=None):
     explicit_receipt = False
     no_receipt = False
     no_fold = False
+    no_hint = False
     quote_arg = None
     strict = False
     i = 0
@@ -1709,6 +1716,8 @@ def main(argv=None):
             strict = True
         elif a == "--no-fold":
             no_fold = True
+        elif a == "--no-hint":
+            no_hint = True
         elif a == "--no-receipt":
             no_receipt = True
         i += 1
@@ -1742,7 +1751,7 @@ def main(argv=None):
         pool = load_quote_pool(quote_arg)
         game = Notebook(seed=seed, debug=debug, receipt=store, name=name, echo=echo,
                         door=door_store, fold=not no_fold, quote_pool=pool,
-                        strict_content=strict)
+                        strict_content=strict, show_hint=not no_hint)
     except ValueError as exc:
         print(f"[原话池] {exc}")
         return 2

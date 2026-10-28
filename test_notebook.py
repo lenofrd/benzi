@@ -10,6 +10,7 @@ v0.3.1 的旧语义回归全部保留；新增回执/留话/回声/CLI/原话池
 """
 import builtins
 import contextlib
+import http.server
 import importlib.util
 import io
 import itertools
@@ -18,6 +19,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from collections import deque
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1368,6 +1370,91 @@ def test_inbox():
         nb.Notebook = old
 
 
+def test_http_door():
+    group("HTTP 门缝")
+
+    # ── 桩服务器 ─────────────────────────────────────────
+    class _Stub(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):  # 安静
+            pass
+        def do_GET(self):
+            if "?list=" in self.path:
+                body = json.dumps({"items": [
+                    {"line": "旧", "ts": 1}, {"line": "新", "ts": 2}
+                ], "count": 2}).encode()
+            elif self.path.endswith("/door"):
+                body = json.dumps({"line": "你好", "ts": 1}).encode()
+            else:
+                body = json.dumps({"line": None, "ts": None}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(n)
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+            line = data.get("line", "")
+            if line == "error":
+                self.send_response(500)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "ts": 999}).encode())
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Stub)
+    port = srv.server_address[1]
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+
+    try:
+        # 1. GET 拿到 {"line": "你好"} → latest_line() == "你好"
+        d = nb.HttpDoorStore(f"http://127.0.0.1:{port}")
+        check("GET 有 line", d.latest_line() == "你好")
+
+        # 2. GET 空 line → None
+        d2 = nb.HttpDoorStore(f"http://127.0.0.1:{port}")
+        d2.path = d2.path.replace("/door", "/door2")  # 桩里 /door2 回空
+        check("GET 空 line → None", d2.latest_line() is None)
+
+        # 3. GET 500 → None 且不抛
+        class _Bad(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                self.send_response(500); self.end_headers()
+        srv2 = http.server.HTTPServer(("127.0.0.1", 0), _Bad)
+        p2 = srv2.server_address[1]
+        threading.Thread(target=srv2.serve_forever, daemon=True).start()
+        d3 = nb.HttpDoorStore(f"http://127.0.0.1:{p2}")
+        check("GET 500 → None", d3.latest_line() is None)
+
+        # 4. POST 成功 → True；POST 500 → False 且不抛
+        d4 = nb.HttpDoorStore(f"http://127.0.0.1:{port}")
+        check("POST 成功", d4.append("塞一句") is True)
+        d5 = nb.HttpDoorStore(f"http://127.0.0.1:{p2}")
+        check("POST 500 → False", d5.append("error") is False)
+
+        # 5. list_recent 正常
+        d6 = nb.HttpDoorStore(f"http://127.0.0.1:{port}")
+        r = d6.list_recent(10)
+        check("list_recent 有条数", r is not None and r["count"] == 2)
+        check("list_recent 有 items", r is not None and len(r["items"]) == 2)
+
+        # 6. 连不上 → None/False 且不抛
+        d7 = nb.HttpDoorStore("http://127.0.0.1:1")  # 端口 1 必挂
+        check("连不上 latest_line → None", d7.latest_line() is None)
+        check("连不上 append → False", d7.append("x") is False)
+        check("连不上 list_recent → None", d7.list_recent(10) is None)
+    finally:
+        srv.shutdown()
+        srv2.shutdown()
+
+
 def main():
     print("本子 自动化测试\n")
     test_api()
@@ -1386,6 +1473,7 @@ def main():
     test_v05_cli()
     test_quote_pool()
     test_inbox()
+    test_http_door()
     print()
     for title, total, passed in GROUPS:
         print(f"  {title}：{passed}/{total}")
