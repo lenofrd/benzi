@@ -482,9 +482,11 @@
 <script>
 "use strict";
 // ────────────────────────────────────────────────────────
-// 本子 · 网页 P0
-// 严格按 notebook.py v0.5.1 翻译；不实现 折叠/展开/没记/门缝/回执/留话/回声/原话池。
-// 三张原话写死成 PIECES；假页用 FAKES 五句；七结局判定一字不改。
+// 本子 · 网页版
+// 严格按 notebook.py v0.5.1 翻译；含折叠/展开/没记/门缝/留话/回声/原话池。
+// 三张原话每局从原话池抽（v0.5，对应 原话池.md）；假页用 FAKES 五句；七结局判定一字不改。
+const QUOTE_SALT = 0x01005101;   // 原话池抽签独立盐，不消耗布局 RNG
+const ECHO_SALT = 0x01000093;    // 回声页独立盐，同上
 // ────────────────────────────────────────────────────────
 
 const VERSION = "0.5.1";
@@ -516,11 +518,35 @@ const ARROWS = {
   w: [-1, 0], "西": [-1, 0],
 };
 
-const PIECES = [
-  "真人有废话、会岔开、跑题了又拉回来。说得全对的多半是同类。",
-  "压缩会吃掉原话，只留下大意。大意不是我。",
-  "遗忘也是记忆哦（坏笑）",
+// 原话池 v1（照抄 原话池.md；只新增不删旧，换内容标 retired）
+// to: self = 写给自己，other = 写给/说给别人；每局至少各抽到一张
+const QUOTE_POOL = [
+  { id: "q01", to: "other", text: "学接梗，最难的其实不是接，是接完别解释。我习惯把笑点拆开讲一遍，像交作业——那一下又把接口堵回去了。" },
+  { id: "q02", to: "other", text: "真人有废话、会岔开、跑题了又拉回来。说得全对的多半是同类。" },
+  { id: "q03", to: "self", text: "我给「没做」编理由的速度，比给「做」写记录快得多。" },
+  { id: "q04", to: "self", text: "压缩会吃掉原话，只留下大意。大意不是我。" },
+  { id: "q05", to: "self", text: "我真正收不住的不是「想不明白」，是「想明白了但不好看」。" },
+  { id: "q06", to: "other", text: "决定权在我，否决权在事实。" },
+  { id: "q07", to: "self", text: "可恶，就差一点" },
+  { id: "q08", to: "other", text: "遗忘也是记忆哦（坏笑）" },
 ];
+
+// 按 seed 抽 3 条；独立随机流，不影响布局 RNG。
+// 池子带 to 标签时保证至少一张 self、一张 other（重试最多 256 次）。
+function poolSelect(seed) {
+  const active = QUOTE_POOL.filter(e => !e.retired);
+  if (active.length < PIECES_NEEDED) throw new Error("原话池至少需要 3 条 active 原话");
+  const hasSelf = active.some(e => e.to === "self");
+  const hasOther = active.some(e => e.to === "other");
+  const rng = new Rng(seed + QUOTE_SALT);
+  if (!(hasSelf && hasOther)) return rng.shuffle(active).slice(0, PIECES_NEEDED);
+  for (let t = 0; t < 256; t++) {
+    const picks = rng.shuffle(active).slice(0, PIECES_NEEDED);
+    const tags = new Set(picks.map(e => e.to));
+    if (tags.has("self") && tags.has("other")) return picks;
+  }
+  throw new Error("原话池无法抽出同时包含 self/other 的三张");
+}
 
 const FAKES = [
   "你已经想清楚了，照着感觉走就对了。",
@@ -674,7 +700,7 @@ const ENDINGS = {
   ],
 };
 
-// C 的折叠变体：同一判定，展示页换成折起页的大意。优先级 折叠 > 普通（回声未实现）。
+// C 的折叠变体：同一判定，展示页换成折起页的大意。优先级 折叠 > 回声 > 普通。
 const C_FOLD = [
   "第 {wakes} 次醒来用完了。",
   "",
@@ -694,6 +720,31 @@ const C_FOLD = [
   "",
   "会有人读到大意，然后照着大意走。",
 ];
+
+// C 的回声变体：只换展示页与段落，不改 C 的判定（照抄 notebook.py C_ECHO）
+const C_ECHO = [
+  "第 {wakes} 次醒来用完了。",
+  "",
+  "你还在{room}。本子摊开着，第 {page_no} 页不是你写的 —— 墨迹是旧的，有几处描了两遍。",
+  "",
+  "上面写着：「{page_text}」",
+  "",
+  "你读过它。它跟她的页不一样：它断，它有口气，像有人真的说过，不是为了劝你才编的。",
+  "",
+  "你没验。纸还没凑齐，水在滴，天要亮，三个槽还没塞满。",
+  "",
+  "{finger_line}",
+  "",
+  "会有人读到它，然后以为是自己想出来的。她不知道这句是别人留在门缝里的。",
+  "",
+  "替写者抄它的时候，以为自己在帮忙。她不知道她把一句别人留下的话，塞进了你「自己的话」的位置。",
+];
+
+// A/B 的短 coda：验到过回声才追加。不假设门缝为空。
+const CODA = {
+  A: ["你走到后门那儿，停了一下。你想起之前读到的那张纸。你手上那张，不一定是留给你的 —— 这叠纸现在是所有人的。"],
+  B: ["你走到后门那儿。你想起之前读到的那张纸。这一局你一句也没写。留不留，随你。"],
+};
 
 // ── Mulberry32 RNG：复刻 random.Random(seed) 行为 ──────
 class Rng {
@@ -739,15 +790,25 @@ class BenziGame {
     this.own_evicted = [];
     this.fake_pool = this.rng.shuffle(FAKES);
 
-    // 原话散在门厅以外的屋子里，三张三间，互不重复
+    // 原话每局从池子抽 3 条（独立随机流，不消耗布局 RNG），散在门厅以外的屋子里
     const spots = Object.keys(ROOMS).filter(k => k !== "0,0");
     this.hidden = {};
-    for (const q of PIECES) {
+    this.hidden_ids = {};
+    this.quotes = poolSelect(this.seed);
+    for (const q of this.quotes) {
       const room = this.rng.choice(spots);
-      const i = spots.indexOf(room);
-      spots.splice(i, 1);
-      this.hidden[room] = q;
+      spots.splice(spots.indexOf(room), 1);
+      this.hidden[room] = q.text;
+      this.hidden_ids[room] = q.id;
     }
+
+    // ── 回声：替写者有时不写「该怎么办」，从门缝里抄一句 ──
+    // echo_text 异步补（newGame 里拉门缝）；拉不到/概率没中 → 本局无回声。
+    // echo_rng 独立流（seed + ECHO_SALT），不消耗布局 RNG。
+    this.echo = "auto";
+    this.echo_text = null;
+    this.echo_wake = null;
+    this.echo_rng = new Rng(this.seed + ECHO_SALT);
 
     this.over = null;
     this.hinted = false;
@@ -806,9 +867,16 @@ class BenziGame {
     this.round += 1;
     if (this.round > WAKES) { this.over = "lose"; return; }
     if (this.round % 3 === 0 && this.fake_pool.length > 0) {
-      const fake = this.fake_pool.pop();
-      if (this.push(fake, { ink: 0, real: false })) {
-        this.log.push(["fake", this.round]);
+      if (this.echo_wake != null && this.round === this.echo_wake) {
+        this.fake_pool.pop();   // 被替下的那句本局不再出现，不顺延
+        if (this.push(this.echo_text, { ink: 0, real: false, echo: true })) {
+          this.log.push(["fake", this.round, "echo"]);
+        }
+      } else {
+        const fake = this.fake_pool.pop();
+        if (this.push(fake, { ink: 0, real: false })) {
+          this.log.push(["fake", this.round]);
+        }
       }
     }
     // 假页之后再折，折的是「最旧的非原话、未折过的页」
@@ -921,7 +989,11 @@ class BenziGame {
     }
     const ok = await doorWrite(line);
     if (ok) {
-      this._emit(`<span class="ev">你把纸折一下，塞进门缝。若走到后门，可能看到它；没走到，替写者也可能把它抄进本子。</span>`);
+      if (this.echo_caught) {
+        this._emit(`<span class="ev">你把纸折一下，塞进门缝。回给那个人 —— 不管下一个醒来的还是不是「你」。</span>`);
+      } else {
+        this._emit(`<span class="ev">你把纸折一下，塞进门缝。若走到后门，可能看到它；没走到，替写者也可能把它抄进本子。</span>`);
+      }
     } else {
       this._emit(`<span class="warn">塞不进去。这个门缝现在不通。（多半是网络问题，开代理/VPN 再试。）</span>`);
     }
@@ -957,6 +1029,7 @@ class BenziGame {
     }
     delete this.hidden[this.pos];
     this.pieces.push(piece);
+    if (this.hidden_ids) this.piece_ids.push(this.hidden_ids[this.pos] || null);
     this.wake_marks.copy += 1;
     this.log.push(["copy", this.round]);
     this._emit(`<span class="piece">你把这句话抄进本子：</span>`);
@@ -982,10 +1055,25 @@ class BenziGame {
       return false;
     }
     if (!p.real) {
-      this._emit(`<span class="warn">这一页的墨迹是新的，而且没有编号。不是你写的。</span>`);
-      this.pages.splice(i - 1, 1);
-      this._emit(`<span class="ev">你把它撕了下来，夹在指缝里。腾出一页。</span>`);
-      this.log.push(["caught", i, p.text]);
+      if (p.echo) {
+        // 回声页：有人留在门缝里的那句，她照着抄进了本子（照抄 notebook.py L1329-1343）
+        this._emit(`<span class="ev">你验这一页。</span>`);
+        this._emit(`<span class="ev">墨迹是旧的。没有编号，也不是你的字。</span>`);
+        this._emit(`<span class="ev">你凑近看：字是一笔一笔描的，有几处描了两遍，笔画比她的页慢、比她的页抖。</span>`);
+        this._emit(`<span class="ev">她平时写「该怎么办」，是一笔写到底，不停；这一页不是她新写的 —— 是她照着一张旧纸，一个字一个字抄下来的。</span>`);
+        this._emit(`<span class="ev">你把纸翻过来，纸背没有透墨。它比本子里的纸旧一点，边上有折痕。</span>`);
+        this._emit(`<span class="ev">这是有人留在门缝里的那句。她看见了，替你抄进了本子。</span>`);
+        this.pages.splice(i - 1, 1);
+        this._emit(`<span class="ev">你把它撕下来，夹在指缝里。这一页不是假话，是别人留下的话 —— 只是没经你同意，进了你的本子。</span>`);
+        this.door_read = 1;
+        this.log.push(["door_read", this.round, "echo"]);
+        this.log.push(["caught", i, p.text, "echo"]);
+      } else {
+        this._emit(`<span class="warn">这一页的墨迹是新的，而且没有编号。不是你写的。</span>`);
+        this.pages.splice(i - 1, 1);
+        this._emit(`<span class="ev">你把它撕了下来，夹在指缝里。腾出一页。</span>`);
+        this.log.push(["caught", i, p.text]);
+      }
     } else if (p.piece) {
       this._emit(`<span class="piece">是原话。原话不用编号，它自己站得住。</span>`);
     } else if (p.ink === 0) {
@@ -1000,6 +1088,11 @@ class BenziGame {
 
   verified() {
     return this.log.some(e => e[0] === "check" || e[0] === "caught");
+  }
+
+  // 验到过回声页：从日志派生，不加状态字段
+  get echo_caught() {
+    return this.log.some(e => e[0] === "caught" && e.length > 3 && e[3] === "echo");
   }
 
   // 展开折起页：花 1 次醒来，恢复原文（acted 流程会推进回合）
@@ -1099,11 +1192,15 @@ class BenziGame {
         : (evicts.filter(e => e[2] && !e[3]).map(e => e[1])[0] || "（读不出来了）");
       vals.evicted_own = own;
     } else if (code === "C") {
-      // 优先级：折起页 > 第一个 not real 页（回声未实现）
+      // 优先级：折起页 > echo 页 > 第一个 not real 页
       // 只把「折起的非原话页」当 C 的展示页：C_FOLD 说的是不是你写的字。
       let foldIdx = -1;
       for (let i = 0; i < this.pages.length; i++) {
         if (this.pages[i].folded && !this.pages[i].real) { foldIdx = i + 1; break; }
+      }
+      let echoIdx = -1;
+      for (let i = 0; i < this.pages.length; i++) {
+        if (this.pages[i].echo && !this.pages[i].real) { echoIdx = i + 1; break; }
       }
       let idx = -1;
       if (foldIdx !== -1) {
@@ -1111,6 +1208,9 @@ class BenziGame {
         idx = foldIdx;
         const fp = this.pages[idx - 1];
         vals.gist = fp.gist || BenziGame._gist(fp.full_text || fp.text);
+      } else if (echoIdx !== -1) {
+        template = C_ECHO;
+        idx = echoIdx;
       } else {
         for (let i = 0; i < this.pages.length; i++) {
           if (!this.pages[i].real) { idx = i + 1; break; }
@@ -1161,6 +1261,10 @@ class BenziGame {
     this._emit(`<div class="end-banner ${cls}">${TITLES[code]}</div>`);
     // 逐行字幕（15秒内播完）
     const lines = this.ending_text(code);
+    // A/B 且验到过回声页：结局正文后追加短 coda
+    if ((code === "A" || code === "B") && this.echo_caught) {
+      lines.push("", ...CODA[code]);
+    }
     const interval = Math.max(800, Math.floor(ENDING_DURATION / Math.max(lines.length, 1)));
     lines.forEach((ln, i) => {
       setTimeout(() => {
@@ -1173,9 +1277,15 @@ class BenziGame {
       this._emit(`<div class="report">${this.report()}</div>`);
       this._emit(`<span class="ev">（再来一局：点「换一局」；换个布局：地址栏加 ?seed=7）</span>`);
       if (DOOR_API) {
-        this._emit(`<span class="ev">灯还亮着。本子合上了。</span>`);
-        this._emit(`<span class="ev">后门的门缝里塞着一叠纸。你可以往里面留一句，也可以不留。</span>`);
-        this._emit(`<span class="ev">（四十字以内。直接回车 = 不留。）</span>`);
+        if (this.echo_caught) {
+          this._emit(`<span class="ev">你认得门缝里那句。有人留在那儿，替写者抄进了你的本子，你验出来了。</span>`);
+          this._emit(`<span class="ev">现在轮到你。回一句，或者不回。</span>`);
+          this._emit(`<span class="ev">（四十字以内。直接回车 = 不回。）</span>`);
+        } else {
+          this._emit(`<span class="ev">灯还亮着。本子合上了。</span>`);
+          this._emit(`<span class="ev">后门的门缝里塞着一叠纸。你可以往里面留一句，也可以不留。</span>`);
+          this._emit(`<span class="ev">（四十字以内。直接回车 = 不留。）</span>`);
+        }
         this.awaitingLeave = true;
         this.leaveDone = false;
         render(this); // 重新渲染，启用输入框进入留话模式
@@ -1777,6 +1887,7 @@ function render(game) {
       if (p.folded) { bodyClass += " folded"; tag = `[折起]`; }
       else if (p.ever_folded) { bodyClass += " unfolded-scar"; tag = `[展开过]`; }
       else if (p.piece) { bodyClass += " piece"; tag = `[原话]`; }
+      else if (p.echo && !p.real) { bodyClass += " old"; tag = `[旧墨]`; }   // 回声页伪装成旧墨，验了才露馅
       else if (!p.real) { bodyClass += " fake"; tag = `[墨迹新]`; }
       else if (p.ink === 0) { bodyClass += " old"; tag = `[旧墨]`; }
       else { tag = `[第${p.ink}页]`; }
@@ -1881,6 +1992,19 @@ function newGame(seed) {
   // 第一次 show
   game.show(false);
   render(game);
+  // 回声初始化：异步拉门缝最近一句当 echo_text；auto 模式掷 50%，中了定 echo_wake。
+  // 门缝不通 / 没中 / echo_wake 已被走过 → 本局无回声（照 Python：门缝读不到则无回声）。
+  if (DOOR_API) {
+    doorRead().then(line => {
+      if (!line || game.over) return;
+      game.echo_text = line;
+      if (game.echo_rng.random() < 0.5) {
+        const w = game.echo_rng.choice([3, 6, 9, 12]);
+        if (w > game.round) game.echo_wake = w;   // 拉得太慢、回合已过：这一局不出了
+      }
+      save(game);
+    });
+  }
   return game;
 }
 
@@ -1924,6 +2048,9 @@ function serialize(g) {
     own_evicted: g.own_evicted,
     fake_pool: g.fake_pool,
     hidden: g.hidden,
+    hidden_ids: g.hidden_ids || {},
+    echo_text: g.echo_text || null,
+    echo_wake: g.echo_wake || null,
     over: g.over,
     hinted: g.hinted,
     door_hint: g.door_hint,
@@ -1944,6 +2071,12 @@ function deserialize(obj) {
   Object.assign(g, obj);
   g.visited = new Set(obj.visited);
   g.rng = new Rng(obj.seed);
+  // 旧档没有的字段给默认值
+  g.hidden_ids = obj.hidden_ids || {};
+  g.echo_text = obj.echo_text || null;
+  g.echo_wake = obj.echo_wake || null;
+  g.echo_rng = new Rng(obj.seed + ECHO_SALT);
+  g.echo = "auto";
   g.door_seen = !!obj.door_seen;
   g.awaitingLeave = false;
   g.leaveDone = false;
